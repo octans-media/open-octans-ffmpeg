@@ -110,8 +110,8 @@ static int name##_##nbits(AVFilterContext *ctx, void *arg, int jobnr, int nb_job
     const int height = td->height;                                                                    \
     const int sc_offset = jobnr * 2 * steps_y;                                                        \
     const int sr_offset = jobnr * (MAX_MATRIX_SIZE - 1);                                              \
-    const int slice_start = (height * jobnr) / nb_jobs;                                               \
-    const int slice_end = (height * (jobnr+1)) / nb_jobs;                                             \
+    const int slice_start = ff_slice_pos(height, jobnr, nb_jobs);                                     \
+    const int slice_end = ff_slice_pos(height, jobnr + 1, nb_jobs);                                   \
                                                                                                       \
     int32_t res;                                                                                      \
     int x, y, z;                                                                                      \
@@ -394,15 +394,15 @@ static const AVFilterPad avfilter_vf_unsharp_inputs[] = {
     },
 };
 
-const AVFilter ff_vf_unsharp = {
-    .name          = "unsharp",
-    .description   = NULL_IF_CONFIG_SMALL("Sharpen or blur the input video."),
+const FFFilter ff_vf_unsharp = {
+    .p.name        = "unsharp",
+    .p.description = NULL_IF_CONFIG_SMALL("Sharpen or blur the input video."),
+    .p.priv_class  = &unsharp_class,
+    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
     .priv_size     = sizeof(UnsharpContext),
-    .priv_class    = &unsharp_class,
     .init          = init,
     .uninit        = uninit,
     FILTER_INPUTS(avfilter_vf_unsharp_inputs),
     FILTER_OUTPUTS(ff_video_default_filterpad),
     FILTER_PIXFMTS_ARRAY(pix_fmts),
-    .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
 };

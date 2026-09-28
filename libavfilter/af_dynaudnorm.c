@@ -579,8 +579,8 @@ static int update_gain_histories(AVFilterContext *ctx, void *arg, int jobnr, int
     DynamicAudioNormalizerContext *s = ctx->priv;
     AVFrame *analyze_frame = arg;
     const int channels = s->channels;
-    const int start = (channels * jobnr) / nb_jobs;
-    const int end = (channels * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(channels, jobnr, nb_jobs);
+    const int end = ff_slice_pos(channels, jobnr + 1, nb_jobs);
 
     for (int c = start; c < end; c++)
         update_gain_history(s, c, get_max_local_gain(s, analyze_frame, c));
@@ -824,8 +824,8 @@ static int amplify_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_j
     AVFrame *in = td->in;
     const int enabled = td->enabled;
     const int channels = s->channels;
-    const int start = (channels * jobnr) / nb_jobs;
-    const int end = (channels * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(channels, jobnr, nb_jobs);
+    const int end = ff_slice_pos(channels, jobnr + 1, nb_jobs);
 
     for (int ch = start; ch < end; ch++)
         amplify_channel(s, in, out, enabled, ch);
@@ -1020,9 +1020,12 @@ static const AVFilterPad avfilter_af_dynaudnorm_inputs[] = {
     },
 };
 
-const AVFilter ff_af_dynaudnorm = {
-    .name          = "dynaudnorm",
-    .description   = NULL_IF_CONFIG_SMALL("Dynamic Audio Normalizer."),
+const FFFilter ff_af_dynaudnorm = {
+    .p.name        = "dynaudnorm",
+    .p.description = NULL_IF_CONFIG_SMALL("Dynamic Audio Normalizer."),
+    .p.priv_class  = &dynaudnorm_class,
+    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
+                     AVFILTER_FLAG_SLICE_THREADS,
     .priv_size     = sizeof(DynamicAudioNormalizerContext),
     .init          = init,
     .uninit        = uninit,
@@ -1030,8 +1033,5 @@ const AVFilter ff_af_dynaudnorm = {
     FILTER_INPUTS(avfilter_af_dynaudnorm_inputs),
     FILTER_OUTPUTS(ff_audio_default_filterpad),
     FILTER_SINGLE_SAMPLEFMT(AV_SAMPLE_FMT_DBLP),
-    .priv_class    = &dynaudnorm_class,
-    .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
-                     AVFILTER_FLAG_SLICE_THREADS,
     .process_command = process_command,
 };

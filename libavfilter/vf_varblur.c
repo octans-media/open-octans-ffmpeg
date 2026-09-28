@@ -215,8 +215,8 @@ static int blur_planes(AVFilterContext *ctx, void *arg,
 
     for (int plane = 0; plane < s->nb_planes; plane++) {
         const int height = s->planeheight[plane];
-        const int slice_start = (height * jobnr) / nb_jobs;
-        const int slice_end = (height * (jobnr+1)) / nb_jobs;
+        const int slice_start = ff_slice_pos(height, jobnr, nb_jobs);
+        const int slice_end = ff_slice_pos(height, jobnr + 1, nb_jobs);
         const int width = s->planewidth[plane];
         const int linesize = in->linesize[plane];
         const int dst_linesize = out->linesize[plane];
@@ -397,18 +397,18 @@ static const AVFilterPad varblur_outputs[] = {
     },
 };
 
-const AVFilter ff_vf_varblur = {
-    .name          = "varblur",
-    .description   = NULL_IF_CONFIG_SMALL("Apply Variable Blur filter."),
+const FFFilter ff_vf_varblur = {
+    .p.name        = "varblur",
+    .p.description = NULL_IF_CONFIG_SMALL("Apply Variable Blur filter."),
+    .p.priv_class  = &varblur_class,
+    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
+                     AVFILTER_FLAG_SLICE_THREADS,
     .priv_size     = sizeof(VarBlurContext),
-    .priv_class    = &varblur_class,
     .activate      = activate,
     .preinit       = varblur_framesync_preinit,
     .uninit        = uninit,
     FILTER_INPUTS(varblur_inputs),
     FILTER_OUTPUTS(varblur_outputs),
     FILTER_PIXFMTS_ARRAY(pix_fmts),
-    .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
-                     AVFILTER_FLAG_SLICE_THREADS,
     .process_command = ff_filter_process_command,
 };

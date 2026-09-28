@@ -981,9 +981,9 @@ static int filter_slice(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
     AVFrame *out = td->out;
 
     for (int plane = 0; plane < s->nb_planes; plane++) {
-        const int slice_start = (s->height[plane] * jobnr) / nb_jobs;
-        const int slice_end = (s->height[plane] * (jobnr+1)) / nb_jobs;
-        const int islice_start = (s->height[s->index] * jobnr) / nb_jobs;
+        const int slice_start = ff_slice_pos(s->height[plane], jobnr, nb_jobs);
+        const int slice_end = ff_slice_pos(s->height[plane], jobnr + 1, nb_jobs);
+        const int islice_start = ff_slice_pos(s->height[s->index], jobnr, nb_jobs);
         ptrdiff_t ilinesize = in->linesize[s->index];
         ptrdiff_t slinesize = in->linesize[plane];
         ptrdiff_t dlinesize = out->linesize[plane];
@@ -1055,15 +1055,15 @@ static av_cold void uninit(AVFilterContext *ctx)
 
 AVFILTER_DEFINE_CLASS(pseudocolor);
 
-const AVFilter ff_vf_pseudocolor = {
-    .name          = "pseudocolor",
-    .description   = NULL_IF_CONFIG_SMALL("Make pseudocolored video frames."),
+const FFFilter ff_vf_pseudocolor = {
+    .p.name        = "pseudocolor",
+    .p.description = NULL_IF_CONFIG_SMALL("Make pseudocolored video frames."),
+    .p.priv_class  = &pseudocolor_class,
+    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
     .priv_size     = sizeof(PseudoColorContext),
-    .priv_class    = &pseudocolor_class,
     .uninit        = uninit,
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(ff_video_default_filterpad),
     FILTER_PIXFMTS_ARRAY(pix_fmts),
-    .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
     .process_command = process_command,
 };

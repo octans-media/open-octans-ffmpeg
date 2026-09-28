@@ -2193,8 +2193,8 @@ static int xfade_slice(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
     XFadeContext *s = ctx->priv;
     AVFilterLink *outlink = ctx->outputs[0];
     ThreadData *td = arg;
-    int slice_start = (outlink->h *  jobnr   ) / nb_jobs;
-    int slice_end   = (outlink->h * (jobnr+1)) / nb_jobs;
+    int slice_start = ff_slice_pos(outlink->h, jobnr, nb_jobs);
+    int slice_end   = ff_slice_pos(outlink->h, jobnr + 1, nb_jobs);
 
     s->transitionf(ctx, td->xf[0], td->xf[1], td->out, td->progress, slice_start, slice_end, jobnr);
 
@@ -2390,15 +2390,15 @@ static const AVFilterPad xfade_outputs[] = {
     },
 };
 
-const AVFilter ff_vf_xfade = {
-    .name          = "xfade",
-    .description   = NULL_IF_CONFIG_SMALL("Cross fade one video with another video."),
+const FFFilter ff_vf_xfade = {
+    .p.name        = "xfade",
+    .p.description = NULL_IF_CONFIG_SMALL("Cross fade one video with another video."),
+    .p.priv_class  = &xfade_class,
+    .p.flags       = AVFILTER_FLAG_SLICE_THREADS,
     .priv_size     = sizeof(XFadeContext),
-    .priv_class    = &xfade_class,
     .activate      = xfade_activate,
     .uninit        = uninit,
     FILTER_INPUTS(xfade_inputs),
     FILTER_OUTPUTS(xfade_outputs),
     FILTER_PIXFMTS_ARRAY(pix_fmts),
-    .flags         = AVFILTER_FLAG_SLICE_THREADS,
 };

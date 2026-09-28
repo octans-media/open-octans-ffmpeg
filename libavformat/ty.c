@@ -303,7 +303,7 @@ static int ty_read_header(AVFormatContext *s)
     if (ty->tivo_series == TIVO_SERIES_UNKNOWN ||
         ty->audio_type == TIVO_AUDIO_UNKNOWN ||
         ty->tivo_type == TIVO_TYPE_UNKNOWN)
-        return AVERROR(EIO);
+        return AVERROR_INVALIDDATA;
 
     st = avformat_new_stream(s, NULL);
     if (!st)
@@ -395,12 +395,16 @@ static int demux_video(AVFormatContext *s, TyRecHdr *rec_hdr, AVPacket *pkt)
     int got_packet = 0;
 
     if (subrec_type != 0x02 && subrec_type != 0x0c &&
-        subrec_type != 0x08 && rec_size > 4) {
+        subrec_type != 0x08 && rec_size > 7) {
+
         /* get the PTS from this packet if it has one.
          * on S1, only 0x06 has PES.  On S2, however, most all do.
          * Do NOT Pass the PES Header to the MPEG2 codec */
         es_offset1 = find_es_header(ty_VideoPacket, ty->chunk + ty->cur_chunk_pos, 5);
         if (es_offset1 != -1) {
+            if (rec_size < es_offset1 + VIDEO_PTS_OFFSET + 5)
+                return AVERROR_INVALIDDATA;
+
             ty->last_video_pts = ff_parse_pes_pts(
                     ty->chunk + ty->cur_chunk_pos + es_offset1 + VIDEO_PTS_OFFSET);
             if (subrec_type != 0x06) {

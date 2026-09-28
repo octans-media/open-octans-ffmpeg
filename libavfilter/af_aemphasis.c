@@ -105,8 +105,8 @@ static int filter_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_jo
     ThreadData *td = arg;
     AVFrame *out = td->out;
     AVFrame *in = td->in;
-    const int start = (in->ch_layout.nb_channels * jobnr) / nb_jobs;
-    const int end = (in->ch_layout.nb_channels * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(in->ch_layout.nb_channels, jobnr, nb_jobs);
+    const int end = ff_slice_pos(in->ch_layout.nb_channels, jobnr + 1, nb_jobs);
 
     for (int ch = start; ch < end; ch++) {
         const double *src = (const double *)in->extended_data[ch];
@@ -361,16 +361,16 @@ static const AVFilterPad avfilter_af_aemphasis_inputs[] = {
     },
 };
 
-const AVFilter ff_af_aemphasis = {
-    .name          = "aemphasis",
-    .description   = NULL_IF_CONFIG_SMALL("Audio emphasis."),
+const FFFilter ff_af_aemphasis = {
+    .p.name        = "aemphasis",
+    .p.description = NULL_IF_CONFIG_SMALL("Audio emphasis."),
+    .p.priv_class  = &aemphasis_class,
+    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC |
+                     AVFILTER_FLAG_SLICE_THREADS,
     .priv_size     = sizeof(AudioEmphasisContext),
-    .priv_class    = &aemphasis_class,
     .uninit        = uninit,
     FILTER_INPUTS(avfilter_af_aemphasis_inputs),
     FILTER_OUTPUTS(ff_audio_default_filterpad),
     FILTER_SINGLE_SAMPLEFMT(AV_SAMPLE_FMT_DBLP),
     .process_command = process_command,
-    .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC |
-                     AVFILTER_FLAG_SLICE_THREADS,
 };

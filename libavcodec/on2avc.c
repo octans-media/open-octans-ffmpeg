@@ -866,6 +866,12 @@ static int on2avc_decode_frame(AVCodecContext * avctx, AVFrame *frame,
             av_log(avctx, AV_LOG_ERROR, "No subframes present\n");
             return AVERROR_INVALIDDATA;
         }
+        if (num_frames > INT_MAX / ON2AVC_SUBFRAME_SIZE) {
+            av_log(avctx, AV_LOG_ERROR,
+                   "Too many subframes (%d); per-frame sample count overflows\n",
+                   num_frames);
+            return AVERROR_INVALIDDATA;
+        }
 
         /* get output buffer */
         frame->nb_samples = ON2AVC_SUBFRAME_SIZE * num_frames;
@@ -1023,6 +1029,4 @@ const FFCodec ff_on2avc_decoder = {
     .close          = on2avc_decode_close,
     .p.capabilities = AV_CODEC_CAP_DR1,
     .caps_internal  = FF_CODEC_CAP_INIT_CLEANUP,
-    .p.sample_fmts  = (const enum AVSampleFormat[]) { AV_SAMPLE_FMT_FLTP,
-                                                      AV_SAMPLE_FMT_NONE },
 };

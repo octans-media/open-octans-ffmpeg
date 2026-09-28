@@ -140,7 +140,7 @@ static int config_input(AVFilterLink *inlink)
         s->dsp.limiter = limiter16;
     }
 
-#if ARCH_X86
+#if ARCH_X86 && HAVE_X86ASM
     ff_limiter_init_x86(&s->dsp, desc->comp[0].depth);
 #endif
 
@@ -157,8 +157,8 @@ static int filter_slice(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 
     for (p = 0; p < s->nb_planes; p++) {
         const int h = s->height[p];
-        const int slice_start = (h * jobnr) / nb_jobs;
-        const int slice_end = (h * (jobnr+1)) / nb_jobs;
+        const int slice_start = ff_slice_pos(h, jobnr, nb_jobs);
+        const int slice_end = ff_slice_pos(h, jobnr + 1, nb_jobs);
 
         if (!((1 << p) & s->planes)) {
             if (out != in)
@@ -230,15 +230,16 @@ static const AVFilterPad inputs[] = {
     },
 };
 
-const AVFilter ff_vf_limiter = {
-    .name          = "limiter",
-    .description   = NULL_IF_CONFIG_SMALL("Limit pixels components to the specified range."),
+const FFFilter ff_vf_limiter = {
+    .p.name        = "limiter",
+    .p.description = NULL_IF_CONFIG_SMALL("Limit pixels components to the specified range."),
+    .p.priv_class  = &limiter_class,
+    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC |
+                     AVFILTER_FLAG_SLICE_THREADS,
     .priv_size     = sizeof(LimiterContext),
-    .priv_class    = &limiter_class,
     .init          = init,
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(ff_video_default_filterpad),
     FILTER_PIXFMTS_ARRAY(pix_fmts),
-    .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
     .process_command = process_command,
 };

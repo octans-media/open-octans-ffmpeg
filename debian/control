@@ -1,77 +1,14 @@
-Source: jellyfin-ffmpeg
+Source: octans-ffmpeg-full
 Section: video
 Priority: optional
-Maintainer: Jellyfin Packaging Team <packaging@jellyfin.org>
-Uploaders: Jellyfin Packaging Team <packaging@jellyfin.org>
+Maintainer: Octans Media <octans-media@users.noreply.github.com>
 Rules-Requires-Root: no
-Homepage: https://ffmpeg.org/
-Standards-Version: 4.2.1
-Vcs-Git: https://github.com/jellyfin/jellyfin-ffmpeg.git
-Vcs-Browser: https://github.com/jellyfin/jellyfin-ffmpeg
-Build-Depends:
-# needed for dh
- debhelper,
-# for build-profile support
- dpkg-dev,
-# --enable-gnutls
- libgnutls28-dev | libgnutls-dev,
-# --enable-libbluray
- libbluray-dev,
-# --enable-libdrm
- libdrm-dev [!amd64],
-# --enable-gmp
- libgmp-dev,
-# --enable-libmp3lame
- libmp3lame-dev,
-# --enable-libopus
- libopus-dev,
-# --enable-libtheora
- libtheora-dev,
-# --enable-libvorbis
- libvorbis-dev,
-# --enable-libopenmpt
- libopenmpt-dev,
-# --enable-libwebp
- libwebp-dev,
-# --enable-libvpx
- libvpx-dev,
-# --enable-libx264
- libx264-dev,
-# --enable-libx265
- libx265-dev,
-# --enable-libzvbi
- libzvbi-dev,
-# --enable-cuda-llvm
- clang:amd64,
-# --enable-opencl
- ocl-icd-opencl-dev,
-# used to detect libraries
- pkg-config | pkgconf,
-# HTML documentation
- texinfo,
-# assembler optimizations
- nasm
+Homepage: https://github.com/octans-media/open-octans-ffmpeg
+Standards-Version: 4.7.0
 
-Package: jellyfin-ffmpeg7
-Architecture: amd64 arm64
-Multi-Arch: foreign
-Replaces: jellyfin-ffmpeg, jellyfin-ffmpeg5, jellyfin-ffmpeg6
-Conflicts: jellyfin-ffmpeg, jellyfin-ffmpeg5, jellyfin-ffmpeg6
-Depends:
- ${shlibs:Depends},
- ${misc:Depends}
-Suggests:
- intel-opencl-icd [amd64],
- intel-opencl-icd-legacy [amd64]
-Description: Tools for transcoding, streaming and playing of multimedia files
- FFmpeg is the leading multimedia framework, able to decode, encode, transcode,
- mux, demux, stream, filter and play pretty much anything that humans and
- machines have created. It supports the most obscure ancient formats up to the
- cutting edge.
- .
- This package contains a static build compatible with all Debian/Ubuntu
- releases, designed to facilitate Jellyfin on systems with an unpatched version
- of ffmpeg in their repository. Included files are:
-  * ffmpeg: a command line tool to convert multimedia files between formats
-  * ffprobe: a simple multimedia stream analyzer
-  * vainfo: a command line tool to get information about local VA-API devices
+Package: octans-ffmpeg-full
+Architecture: amd64
+Description: Octans FFmpeg full runtime
+ GPLv3 server-side FFmpeg runtime.
+ Build it with scripts/build-octans-full-linux.sh.
+ debian/rules is intentionally absent.

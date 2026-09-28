@@ -43,8 +43,8 @@ static int do_lumakey_slice8(AVFilterContext *ctx, void *arg, int jobnr, int nb_
 {
     LumakeyContext *s = ctx->priv;
     AVFrame *frame = arg;
-    const int slice_start = (frame->height * jobnr) / nb_jobs;
-    const int slice_end = (frame->height * (jobnr + 1)) / nb_jobs;
+    const int slice_start = ff_slice_pos(frame->height, jobnr, nb_jobs);
+    const int slice_end = ff_slice_pos(frame->height, jobnr + 1, nb_jobs);
     uint8_t *alpha = frame->data[3] + slice_start * frame->linesize[3];
     const uint8_t *luma = frame->data[0] + slice_start * frame->linesize[0];
     const int so = s->so;
@@ -75,8 +75,8 @@ static int do_lumakey_slice16(AVFilterContext *ctx, void *arg, int jobnr, int nb
 {
     LumakeyContext *s = ctx->priv;
     AVFrame *frame = arg;
-    const int slice_start = (frame->height * jobnr) / nb_jobs;
-    const int slice_end = (frame->height * (jobnr + 1)) / nb_jobs;
+    const int slice_start = ff_slice_pos(frame->height, jobnr, nb_jobs);
+    const int slice_end = ff_slice_pos(frame->height, jobnr + 1, nb_jobs);
     uint16_t *alpha = (uint16_t *)(frame->data[3] + slice_start * frame->linesize[3]);
     const uint16_t *luma = (const uint16_t *)(frame->data[0] + slice_start * frame->linesize[0]);
     const int so = s->so;
@@ -184,14 +184,15 @@ static const AVOption lumakey_options[] = {
 
 AVFILTER_DEFINE_CLASS(lumakey);
 
-const AVFilter ff_vf_lumakey = {
-    .name          = "lumakey",
-    .description   = NULL_IF_CONFIG_SMALL("Turns a certain luma into transparency."),
+const FFFilter ff_vf_lumakey = {
+    .p.name        = "lumakey",
+    .p.description = NULL_IF_CONFIG_SMALL("Turns a certain luma into transparency."),
+    .p.priv_class  = &lumakey_class,
+    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC |
+                     AVFILTER_FLAG_SLICE_THREADS,
     .priv_size     = sizeof(LumakeyContext),
-    .priv_class    = &lumakey_class,
     FILTER_INPUTS(lumakey_inputs),
     FILTER_OUTPUTS(ff_video_default_filterpad),
     FILTER_PIXFMTS_ARRAY(pixel_fmts),
-    .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
     .process_command = process_command,
 };

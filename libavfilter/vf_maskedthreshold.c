@@ -154,8 +154,8 @@ static int threshold_slice(AVFilterContext *ctx, void *arg, int jobnr, int nb_jo
         const ptrdiff_t dst_linesize = td->dst->linesize[p];
         const int w = s->planewidth[p];
         const int h = s->planeheight[p];
-        const int slice_start = (h * jobnr) / nb_jobs;
-        const int slice_end = (h * (jobnr+1)) / nb_jobs;
+        const int slice_start = ff_slice_pos(h, jobnr, nb_jobs);
+        const int slice_end = ff_slice_pos(h, jobnr + 1, nb_jobs);
         const uint8_t *src = td->src->data[p] + slice_start * src_linesize;
         const uint8_t *ref = td->ref->data[p] + slice_start * ref_linesize;
         uint8_t *dst = td->dst->data[p] + slice_start * dst_linesize;
@@ -295,16 +295,17 @@ static const AVFilterPad maskedthreshold_outputs[] = {
 
 AVFILTER_DEFINE_CLASS(maskedthreshold);
 
-const AVFilter ff_vf_maskedthreshold = {
-    .name          = "maskedthreshold",
-    .description   = NULL_IF_CONFIG_SMALL("Pick pixels comparing absolute difference of two streams with threshold."),
-    .priv_class    = &maskedthreshold_class,
+const FFFilter ff_vf_maskedthreshold = {
+    .p.name        = "maskedthreshold",
+    .p.description = NULL_IF_CONFIG_SMALL("Pick pixels comparing absolute difference of two streams with threshold."),
+    .p.priv_class  = &maskedthreshold_class,
+    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
+                     AVFILTER_FLAG_SLICE_THREADS,
     .priv_size     = sizeof(MaskedThresholdContext),
     .uninit        = uninit,
     .activate      = activate,
     FILTER_INPUTS(maskedthreshold_inputs),
     FILTER_OUTPUTS(maskedthreshold_outputs),
     FILTER_PIXFMTS_ARRAY(pix_fmts),
-    .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL | AVFILTER_FLAG_SLICE_THREADS,
     .process_command = ff_filter_process_command,
 };

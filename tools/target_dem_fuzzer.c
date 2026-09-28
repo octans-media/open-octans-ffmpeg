@@ -29,7 +29,7 @@
 typedef struct IOContext {
     int64_t pos;
     int64_t filesize;
-    uint8_t *fuzz;
+    const uint8_t *fuzz;
     int fuzz_size;
 } IOContext;
 
@@ -98,10 +98,7 @@ static int64_t io_seek(void *opaque, int64_t offset, int whence)
 const uint32_t maxiteration = 8096;
 const int maxblocks= 50000;
 
-static const uint64_t FUZZ_TAG = 0x4741542D5A5A5546ULL;
-
 int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
-    const uint64_t fuzz_tag = FUZZ_TAG;
     uint32_t it = 0;
     AVFormatContext *avfmt = avformat_alloc_context();
     AVPacket *pkt;
@@ -185,8 +182,11 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
         error("Failed to allocate pkt");
 
     io_buffer = av_malloc(io_buffer_size);
-    if (!io_buffer)
-        error("Failed to allocate io_buffer");
+    if (!io_buffer) {
+        avformat_free_context(avfmt);
+        av_packet_free(&pkt);
+        return 0;
+    }
 
     opaque.filesize = filesize;
     opaque.pos      = 0;

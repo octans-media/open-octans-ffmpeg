@@ -193,8 +193,8 @@ static int filter_slice(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
     int refs = s->cur->linesize[td->plane];
     int df = (s->csp->comp[td->plane].depth + 7) / 8;
     int pix_3 = 3 * df;
-    int slice_start = (td->h *  jobnr   ) / nb_jobs;
-    int slice_end   = (td->h * (jobnr+1)) / nb_jobs;
+    int slice_start = ff_slice_pos(td->h, jobnr, nb_jobs);
+    int slice_end   = ff_slice_pos(td->h, jobnr + 1, nb_jobs);
     int y;
     int edge = 3 + MAX_ALIGN / df - 1;
 
@@ -289,7 +289,7 @@ static int config_output(AVFilterLink *outlink)
         s->filter_edges = filter_edges;
     }
 
-#if ARCH_X86
+#if ARCH_X86 && HAVE_X86ASM
     ff_yadif_init_x86(s);
 #endif
 
@@ -322,14 +322,14 @@ static const AVFilterPad avfilter_vf_yadif_outputs[] = {
     },
 };
 
-const AVFilter ff_vf_yadif = {
-    .name          = "yadif",
-    .description   = NULL_IF_CONFIG_SMALL("Deinterlace the input image."),
+const FFFilter ff_vf_yadif = {
+    .p.name        = "yadif",
+    .p.description = NULL_IF_CONFIG_SMALL("Deinterlace the input image."),
+    .p.priv_class  = &yadif_class,
+    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL | AVFILTER_FLAG_SLICE_THREADS,
     .priv_size     = sizeof(YADIFContext),
-    .priv_class    = &yadif_class,
     .uninit        = ff_yadif_uninit,
     FILTER_INPUTS(avfilter_vf_yadif_inputs),
     FILTER_OUTPUTS(avfilter_vf_yadif_outputs),
     FILTER_PIXFMTS_ARRAY(pix_fmts),
-    .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL | AVFILTER_FLAG_SLICE_THREADS,
 };

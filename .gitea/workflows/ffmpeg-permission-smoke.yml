@@ -1,0 +1,513 @@
+---
+# yamllint disable rule:line-length
+name: ffmpeg-permission-smoke
+
+"on":
+  workflow_dispatch:
+
+env:
+  OCTANS_FFMPEG_CI_CACHE_ROOT: ${{ vars.OCTANS_FFMPEG_CI_CACHE_ROOT }}
+  OCTANS_GITEA_URL: ${{ vars.OCTANS_GITEA_URL }}
+  OCTANS_GITEA_HOST: ${{ vars.OCTANS_GITEA_HOST }}
+  OCTANS_GITEA_PACKAGE_OWNER: octans
+  OCTANS_GITEA_REPOSITORY_OWNER: octans
+  OCTANS_GITEA_REPOSITORY_NAME: open-octans-ffmpeg
+  OCTANS_GITEA_DEBIAN_DISTRIBUTION: resolute
+  OCTANS_GITEA_DEBIAN_COMPONENT: main
+
+jobs:
+  permission-smoke:
+    runs-on: ${{ vars.OCTANS_FFMPEG_RUNNER }}
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Plan Debian package permission smoke
+        run: |
+          set -euo pipefail
+
+          revision="$(git rev-parse HEAD)"
+          short_sha="${GITHUB_SHA:-${revision}}"
+          short_sha="${short_sha:0:8}"
+          ci_timestamp="$(date -u +%Y%m%d%H%M%S)"
+          ci_id="deb-package-permission-${ci_timestamp}-${short_sha}"
+
+          package_name="octans-ffmpeg-ci-permission-smoke"
+          package_version="0.0.0+ci.${ci_timestamp}.${short_sha}"
+          build_root="${OCTANS_FFMPEG_CI_CACHE_ROOT}/${ci_id}"
+          deb_path="${build_root}/dist/${package_name}_${package_version}_amd64.deb"
+          release_asset_path="${build_root}/release/permission-smoke.txt"
+          release_tag="ci-permission-smoke-${ci_timestamp}-${short_sha}"
+          release_name="CI permission smoke ${ci_timestamp} ${short_sha}"
+          debian_base_url="${OCTANS_GITEA_URL}/api/packages/${OCTANS_GITEA_PACKAGE_OWNER}/debian"
+          upload_url="${debian_base_url}/pool/${OCTANS_GITEA_DEBIAN_DISTRIBUTION}/${OCTANS_GITEA_DEBIAN_COMPONENT}/upload"
+          delete_url="${debian_base_url}/pool/${OCTANS_GITEA_DEBIAN_DISTRIBUTION}/${OCTANS_GITEA_DEBIAN_COMPONENT}/${package_name}/${package_version}/amd64"
+          key_url="${debian_base_url}/repository.key"
+          release_api_base="${OCTANS_GITEA_URL}/api/v1/repos/${OCTANS_GITEA_REPOSITORY_OWNER}/${OCTANS_GITEA_REPOSITORY_NAME}"
+
+          mkdir -p "${build_root}/dist" "${build_root}/release"
+
+          {
+            echo "OCTANS_FFMPEG_SMOKE_BUILD_ROOT=${build_root}"
+            echo "OCTANS_FFMPEG_SMOKE_PACKAGE_NAME=${package_name}"
+            echo "OCTANS_FFMPEG_SMOKE_PACKAGE_VERSION=${package_version}"
+            echo "OCTANS_FFMPEG_SMOKE_DEB_PATH=${deb_path}"
+            echo "OCTANS_FFMPEG_SMOKE_RELEASE_ASSET_PATH=${release_asset_path}"
+            echo "OCTANS_FFMPEG_SMOKE_RELEASE_TAG=${release_tag}"
+            echo "OCTANS_FFMPEG_SMOKE_RELEASE_NAME=${release_name}"
+            echo "OCTANS_GITEA_DEBIAN_BASE_URL=${debian_base_url}"
+            echo "OCTANS_GITEA_DEBIAN_UPLOAD_URL=${upload_url}"
+            echo "OCTANS_GITEA_DEBIAN_DELETE_URL=${delete_url}"
+            echo "OCTANS_GITEA_DEBIAN_KEY_URL=${key_url}"
+            echo "OCTANS_GITEA_RELEASE_API_BASE=${release_api_base}"
+          } >> "${GITHUB_ENV}"
+
+          printf 'FFmpeg deb package permission smoke plan:\n'
+          printf '  revision: %s\n' "${revision}"
+          printf '  package: %s\n' "${package_name}"
+          printf '  version: %s\n' "${package_version}"
+          printf '  distribution: %s\n' "${OCTANS_GITEA_DEBIAN_DISTRIBUTION}"
+          printf '  component: %s\n' "${OCTANS_GITEA_DEBIAN_COMPONENT}"
+          printf '  upload_url: %s\n' "${upload_url}"
+          printf '  delete_url: %s\n' "${delete_url}"
+          printf '  release_tag: %s\n' "${release_tag}"
+          printf '  release_api_base: %s\n' "${release_api_base}"
+
+      - name: Validate Gitea package secrets
+        env:
+          OCTANS_GITEA_PACKAGE_USERNAME: ${{ secrets.OCTANS_GITEA_REGISTRY_USERNAME }}
+          OCTANS_GITEA_PACKAGE_TOKEN: ${{ secrets.OCTANS_GITEA_REGISTRY_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          required=(
+            OCTANS_GITEA_PACKAGE_USERNAME
+            OCTANS_GITEA_PACKAGE_TOKEN
+          )
+
+          for name in "${required[@]}"; do
+            if [[ -z "${!name:-}" ]]; then
+              printf 'missing required secret: %s\n' "${name}" >&2
+              exit 1
+            fi
+          done
+
+          printf 'Gitea package secrets are present\n'
+
+      - name: Build smoke Debian package
+        run: |
+          set -euo pipefail
+
+          package_root="${OCTANS_FFMPEG_SMOKE_BUILD_ROOT}/package/root"
+          rm -rf "${package_root}"
+          mkdir -p \
+            "${package_root}/DEBIAN" \
+            "${package_root}/usr/lib/${OCTANS_FFMPEG_SMOKE_PACKAGE_NAME}"
+
+          cat > "${package_root}/DEBIAN/control" <<EOF
+          Package: ${OCTANS_FFMPEG_SMOKE_PACKAGE_NAME}
+          Version: ${OCTANS_FFMPEG_SMOKE_PACKAGE_VERSION}
+          Section: utils
+          Priority: optional
+          Architecture: amd64
+          Maintainer: Octans Media <octans-media@users.noreply.github.com>
+          Description: Octans FFmpeg Gitea Debian package permission smoke
+           This package is uploaded by a manual CI smoke test and deleted after verification.
+          EOF
+
+          sed -i 's/^          //' "${package_root}/DEBIAN/control"
+
+          cat > "${package_root}/usr/lib/${OCTANS_FFMPEG_SMOKE_PACKAGE_NAME}/permission-smoke.txt" <<EOF
+          package=${OCTANS_FFMPEG_SMOKE_PACKAGE_NAME}
+          version=${OCTANS_FFMPEG_SMOKE_PACKAGE_VERSION}
+          EOF
+
+          dpkg-deb --build --root-owner-group \
+            "${package_root}" \
+            "${OCTANS_FFMPEG_SMOKE_DEB_PATH}"
+
+          dpkg-deb --info "${OCTANS_FFMPEG_SMOKE_DEB_PATH}"
+          sha256sum "${OCTANS_FFMPEG_SMOKE_DEB_PATH}"
+
+      - name: Upload smoke package to Gitea Debian registry
+        env:
+          OCTANS_GITEA_PACKAGE_USERNAME: ${{ secrets.OCTANS_GITEA_REGISTRY_USERNAME }}
+          OCTANS_GITEA_PACKAGE_TOKEN: ${{ secrets.OCTANS_GITEA_REGISTRY_TOKEN }}
+        run: |
+          set -euo pipefail
+          . scripts/ci-retry-helpers.sh
+
+          netrc_file="$(mktemp)"
+          trap 'rm -f "${netrc_file}"' EXIT
+          chmod 600 "${netrc_file}"
+          printf 'machine %s login %s password %s\n' \
+            "${OCTANS_GITEA_HOST}" \
+            "${OCTANS_GITEA_PACKAGE_USERNAME}" \
+            "${OCTANS_GITEA_PACKAGE_TOKEN}" \
+            > "${netrc_file}"
+
+          octans_ci_retry_curl \
+            "upload FFmpeg smoke Debian package" \
+            --fail-with-body --silent --show-error \
+            --netrc-file "${netrc_file}" \
+            --upload-file "${OCTANS_FFMPEG_SMOKE_DEB_PATH}" \
+            "${OCTANS_GITEA_DEBIAN_UPLOAD_URL}"
+
+          printf 'uploaded smoke package: %s %s\n' \
+            "${OCTANS_FFMPEG_SMOKE_PACKAGE_NAME}" \
+            "${OCTANS_FFMPEG_SMOKE_PACKAGE_VERSION}"
+
+      - name: Verify smoke package install from Gitea Debian registry
+        env:
+          OCTANS_GITEA_PACKAGE_USERNAME: ${{ secrets.OCTANS_GITEA_REGISTRY_USERNAME }}
+          OCTANS_GITEA_PACKAGE_TOKEN: ${{ secrets.OCTANS_GITEA_REGISTRY_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          export PKG_USER="${OCTANS_GITEA_PACKAGE_USERNAME}"
+          export PKG_TOKEN="${OCTANS_GITEA_PACKAGE_TOKEN}"
+          export PKG_HOST="${OCTANS_GITEA_HOST}"
+          export PKG_NAME="${OCTANS_FFMPEG_SMOKE_PACKAGE_NAME}"
+          export PKG_VERSION="${OCTANS_FFMPEG_SMOKE_PACKAGE_VERSION}"
+          export PKG_BASE_URL="${OCTANS_GITEA_DEBIAN_BASE_URL}"
+          export PKG_KEY_URL="${OCTANS_GITEA_DEBIAN_KEY_URL}"
+          export PKG_DISTRIBUTION="${OCTANS_GITEA_DEBIAN_DISTRIBUTION}"
+          export PKG_COMPONENT="${OCTANS_GITEA_DEBIAN_COMPONENT}"
+
+          docker run --rm -i \
+            -e PKG_USER \
+            -e PKG_TOKEN \
+            -e PKG_HOST \
+            -e PKG_NAME \
+            -e PKG_VERSION \
+            -e PKG_BASE_URL \
+            -e PKG_KEY_URL \
+            -e PKG_DISTRIBUTION \
+            -e PKG_COMPONENT \
+            ubuntu:26.04 \
+            bash -s <<'EOF'
+          set -euo pipefail
+
+          export DEBIAN_FRONTEND=noninteractive
+
+          apt-get update
+          apt-get install -y --no-install-recommends ca-certificates curl
+
+          mkdir -p /etc/apt/keyrings /etc/apt/auth.conf.d
+
+          cat > /tmp/gitea.netrc <<AUTH
+          machine ${PKG_HOST}
+          login ${PKG_USER}
+          password ${PKG_TOKEN}
+          AUTH
+          sed -i 's/^          //' /tmp/gitea.netrc
+          chmod 600 /tmp/gitea.netrc
+
+          curl --fail --silent --show-error \
+            --retry 5 --retry-delay 2 --retry-all-errors \
+            --netrc-file /tmp/gitea.netrc \
+            "${PKG_KEY_URL}" \
+            -o /etc/apt/keyrings/gitea-octans.asc
+
+          cat > /etc/apt/auth.conf.d/gitea-octans.conf <<AUTH
+          machine ${PKG_HOST}
+          login ${PKG_USER}
+          password ${PKG_TOKEN}
+          AUTH
+          sed -i 's/^          //' /etc/apt/auth.conf.d/gitea-octans.conf
+          chmod 600 /etc/apt/auth.conf.d/gitea-octans.conf
+
+          cat > /etc/apt/sources.list.d/gitea-octans.list <<APT
+          deb [signed-by=/etc/apt/keyrings/gitea-octans.asc] ${PKG_BASE_URL} ${PKG_DISTRIBUTION} ${PKG_COMPONENT}
+          APT
+          sed -i 's/^          //' /etc/apt/sources.list.d/gitea-octans.list
+
+          found=0
+          for attempt in 1 2 3 4 5; do
+            apt-get update
+            if apt-cache policy "${PKG_NAME}" | grep -F "${PKG_VERSION}"; then
+              found=1
+              break
+            fi
+
+            printf 'package not visible yet, retrying apt index refresh: attempt %s\n' "${attempt}"
+            sleep 5
+          done
+
+          if [[ "${found}" != "1" ]]; then
+            printf 'smoke package is not visible in Debian registry: %s=%s\n' "${PKG_NAME}" "${PKG_VERSION}" >&2
+            exit 1
+          fi
+
+          apt-get install -y --no-install-recommends "${PKG_NAME}=${PKG_VERSION}"
+          test -f "/usr/lib/${PKG_NAME}/permission-smoke.txt"
+
+          installed_version="$(dpkg-query -W -f='${Version}\n' "${PKG_NAME}")"
+          if [[ "${installed_version}" != "${PKG_VERSION}" ]]; then
+            printf 'installed version mismatch: expected %s, got %s\n' "${PKG_VERSION}" "${installed_version}" >&2
+            exit 1
+          fi
+
+          printf 'installed smoke package from Gitea Debian registry: %s=%s\n' "${PKG_NAME}" "${PKG_VERSION}"
+          EOF
+
+      - name: Create and verify Gitea release permission smoke
+        env:
+          OCTANS_GITEA_RELEASE_TOKEN: ${{ secrets.OCTANS_GITEA_REGISTRY_TOKEN }}
+        run: |
+          set -euo pipefail
+          . scripts/ci-retry-helpers.sh
+
+          if [[ -z "${OCTANS_GITEA_RELEASE_TOKEN:-}" ]]; then
+            printf 'missing required secret: OCTANS_GITEA_RELEASE_TOKEN\n' >&2
+            exit 1
+          fi
+
+          asset_name="$(basename "${OCTANS_FFMPEG_SMOKE_RELEASE_ASSET_PATH}")"
+          cat > "${OCTANS_FFMPEG_SMOKE_RELEASE_ASSET_PATH}" <<EOF
+          repo=${OCTANS_GITEA_REPOSITORY_OWNER}/${OCTANS_GITEA_REPOSITORY_NAME}
+          tag=${OCTANS_FFMPEG_SMOKE_RELEASE_TAG}
+          sha=${GITHUB_SHA}
+          package=${OCTANS_FFMPEG_SMOKE_PACKAGE_NAME}
+          version=${OCTANS_FFMPEG_SMOKE_PACKAGE_VERSION}
+          EOF
+          sed -i 's/^          //' "${OCTANS_FFMPEG_SMOKE_RELEASE_ASSET_PATH}"
+
+          request_json="$(
+            jq -n \
+              --arg tag_name "${OCTANS_FFMPEG_SMOKE_RELEASE_TAG}" \
+              --arg target_commitish "${GITHUB_SHA}" \
+              --arg name "${OCTANS_FFMPEG_SMOKE_RELEASE_NAME}" \
+              --arg body "Temporary release created by ffmpeg permission smoke. It is deleted at the end of this workflow." \
+              '{
+                tag_name: $tag_name,
+                target_commitish: $target_commitish,
+                name: $name,
+                body: $body,
+                draft: false,
+                prerelease: true
+              }'
+          )"
+
+          response_body="$(mktemp)"
+          http_status="$(octans_ci_curl_status \
+            "201" \
+            "${response_body}" \
+            "create FFmpeg Gitea release permission smoke" \
+            --header "Authorization: token ${OCTANS_GITEA_RELEASE_TOKEN}" \
+            --header "Content-Type: application/json" \
+            --request POST \
+            --data "${request_json}" \
+            "${OCTANS_GITEA_RELEASE_API_BASE}/releases")"
+
+          if [[ "${http_status}" != "201" ]]; then
+            printf 'failed to create Gitea release smoke, status=%s\n' "${http_status}" >&2
+            cat "${response_body}" >&2
+            rm -f "${response_body}"
+            exit 1
+          fi
+
+          release_id="$(jq -r '.id // empty' "${response_body}")"
+          rm -f "${response_body}"
+
+          if [[ -z "${release_id}" ]]; then
+            printf 'Gitea release response did not include release id\n' >&2
+            exit 1
+          fi
+
+          echo "OCTANS_FFMPEG_SMOKE_RELEASE_ID=${release_id}" >> "${GITHUB_ENV}"
+          printf 'created Gitea release smoke: tag=%s id=%s\n' \
+            "${OCTANS_FFMPEG_SMOKE_RELEASE_TAG}" \
+            "${release_id}"
+
+          response_body="$(mktemp)"
+          http_status="$(octans_ci_curl_status \
+            "201" \
+            "${response_body}" \
+            "upload FFmpeg Gitea release smoke asset" \
+            --header "Authorization: token ${OCTANS_GITEA_RELEASE_TOKEN}" \
+            --request POST \
+            --form "attachment=@${OCTANS_FFMPEG_SMOKE_RELEASE_ASSET_PATH}" \
+            "${OCTANS_GITEA_RELEASE_API_BASE}/releases/${release_id}/assets?name=${asset_name}")"
+
+          if [[ "${http_status}" != "201" ]]; then
+            printf 'failed to upload Gitea release smoke asset, status=%s\n' "${http_status}" >&2
+            cat "${response_body}" >&2
+            rm -f "${response_body}"
+            exit 1
+          fi
+          rm -f "${response_body}"
+
+          response_body="$(mktemp)"
+          http_status="$(octans_ci_curl_status \
+            "200" \
+            "${response_body}" \
+            "list FFmpeg Gitea release smoke assets" \
+            --header "Authorization: token ${OCTANS_GITEA_RELEASE_TOKEN}" \
+            "${OCTANS_GITEA_RELEASE_API_BASE}/releases/${release_id}/assets")"
+
+          if [[ "${http_status}" != "200" ]]; then
+            printf 'failed to list Gitea release smoke assets, status=%s\n' "${http_status}" >&2
+            cat "${response_body}" >&2
+            rm -f "${response_body}"
+            exit 1
+          fi
+
+          if ! jq -e --arg name "${asset_name}" '.[] | select(.name == $name)' "${response_body}" >/dev/null; then
+            printf 'release smoke asset is missing from Gitea response: %s\n' "${asset_name}" >&2
+            cat "${response_body}" >&2
+            rm -f "${response_body}"
+            exit 1
+          fi
+          rm -f "${response_body}"
+
+          printf 'verified Gitea release smoke asset: %s\n' "${asset_name}"
+
+      - name: Delete Gitea release permission smoke
+        if: always()
+        env:
+          OCTANS_GITEA_RELEASE_TOKEN: ${{ secrets.OCTANS_GITEA_REGISTRY_TOKEN }}
+        run: |
+          set -euo pipefail
+          . scripts/ci-retry-helpers.sh
+
+          if [[ -z "${OCTANS_GITEA_RELEASE_TOKEN:-}" ]]; then
+            printf 'release token is unavailable, skipping release smoke cleanup\n' >&2
+            exit 0
+          fi
+
+          if [[ -z "${OCTANS_GITEA_RELEASE_API_BASE:-}" || -z "${OCTANS_FFMPEG_SMOKE_RELEASE_TAG:-}" ]]; then
+            printf 'release smoke metadata is incomplete, skipping release smoke cleanup\n' >&2
+            exit 0
+          fi
+
+          release_id="${OCTANS_FFMPEG_SMOKE_RELEASE_ID:-}"
+          if [[ -z "${release_id}" ]]; then
+            response_body="$(mktemp)"
+            http_status="$(octans_ci_curl_status \
+              "200,404" \
+              "${response_body}" \
+              "lookup FFmpeg Gitea release smoke" \
+              --header "Authorization: token ${OCTANS_GITEA_RELEASE_TOKEN}" \
+              "${OCTANS_GITEA_RELEASE_API_BASE}/releases/tags/${OCTANS_FFMPEG_SMOKE_RELEASE_TAG}")"
+
+            if [[ "${http_status}" == "200" ]]; then
+              release_id="$(jq -r '.id // empty' "${response_body}")"
+            fi
+            rm -f "${response_body}"
+          fi
+
+          release_created=0
+          if [[ -n "${release_id}" ]]; then
+            release_created=1
+            response_body="$(mktemp)"
+            http_status="$(octans_ci_curl_status \
+              "204,404" \
+              "${response_body}" \
+              "delete FFmpeg Gitea release smoke" \
+              --header "Authorization: token ${OCTANS_GITEA_RELEASE_TOKEN}" \
+              --request DELETE \
+              "${OCTANS_GITEA_RELEASE_API_BASE}/releases/${release_id}")"
+
+            case "${http_status}" in
+              204)
+                printf 'deleted Gitea release smoke: id=%s\n' "${release_id}"
+                ;;
+              404)
+                printf 'Gitea release smoke was already absent\n'
+                ;;
+              *)
+                printf 'failed to delete Gitea release smoke, status=%s\n' "${http_status}" >&2
+                cat "${response_body}" >&2
+                rm -f "${response_body}"
+                exit 1
+                ;;
+            esac
+            rm -f "${response_body}"
+          else
+            printf 'Gitea release smoke release id not found; skipping tag cleanup\n'
+          fi
+
+          if [[ "${release_created}" != "1" ]]; then
+            exit 0
+          fi
+
+          response_body="$(mktemp)"
+          http_status="$(octans_ci_curl_status \
+            "204,404" \
+            "${response_body}" \
+            "delete FFmpeg Gitea release smoke tag" \
+            --header "Authorization: token ${OCTANS_GITEA_RELEASE_TOKEN}" \
+            --request DELETE \
+            "${OCTANS_GITEA_RELEASE_API_BASE}/tags/${OCTANS_FFMPEG_SMOKE_RELEASE_TAG}")"
+
+          case "${http_status}" in
+            204)
+              printf 'deleted Gitea release smoke tag: %s\n' "${OCTANS_FFMPEG_SMOKE_RELEASE_TAG}"
+              ;;
+            404)
+              printf 'Gitea release smoke tag was already absent\n'
+              ;;
+            *)
+              printf 'failed to delete Gitea release smoke tag, status=%s\n' "${http_status}" >&2
+              cat "${response_body}" >&2
+              rm -f "${response_body}"
+              exit 1
+              ;;
+          esac
+          rm -f "${response_body}"
+
+      - name: Delete smoke package from Gitea Debian registry
+        if: always()
+        env:
+          OCTANS_GITEA_PACKAGE_USERNAME: ${{ secrets.OCTANS_GITEA_REGISTRY_USERNAME }}
+          OCTANS_GITEA_PACKAGE_TOKEN: ${{ secrets.OCTANS_GITEA_REGISTRY_TOKEN }}
+        run: |
+          set -euo pipefail
+          . scripts/ci-retry-helpers.sh
+
+          if [[ -z "${OCTANS_GITEA_DEBIAN_DELETE_URL:-}" ]]; then
+            printf 'delete URL is empty, skipping cleanup\n'
+            exit 0
+          fi
+
+          if [[ -z "${OCTANS_GITEA_PACKAGE_USERNAME:-}" || -z "${OCTANS_GITEA_PACKAGE_TOKEN:-}" ]]; then
+            printf 'package secrets are unavailable, skipping remote cleanup\n' >&2
+            exit 0
+          fi
+
+          netrc_file="$(mktemp)"
+          response_body="$(mktemp)"
+          trap 'rm -f "${netrc_file}" "${response_body}"' EXIT
+          chmod 600 "${netrc_file}"
+          printf 'machine %s login %s password %s\n' \
+            "${OCTANS_GITEA_HOST}" \
+            "${OCTANS_GITEA_PACKAGE_USERNAME}" \
+            "${OCTANS_GITEA_PACKAGE_TOKEN}" \
+            > "${netrc_file}"
+
+          http_status="$(octans_ci_curl_status \
+            "204,404" \
+            "${response_body}" \
+            "delete FFmpeg smoke Debian package" \
+            --netrc-file "${netrc_file}" \
+            --request DELETE \
+            "${OCTANS_GITEA_DEBIAN_DELETE_URL}")"
+
+          case "${http_status}" in
+            204)
+              printf 'deleted smoke package: %s %s\n' \
+                "${OCTANS_FFMPEG_SMOKE_PACKAGE_NAME:-unknown}" \
+                "${OCTANS_FFMPEG_SMOKE_PACKAGE_VERSION:-unknown}"
+              ;;
+            404)
+              printf 'smoke package was already absent\n'
+              ;;
+            *)
+              printf 'failed to delete smoke package, status=%s\n' "${http_status}" >&2
+              cat "${response_body}" >&2
+              exit 1
+              ;;
+          esac

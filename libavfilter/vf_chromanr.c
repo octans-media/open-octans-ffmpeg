@@ -97,8 +97,8 @@ static int distance ## _slice##name(AVFilterContext *ctx, void *arg,            
     const int thres_v = s->thres_v;                                                      \
     const int h = s->planeheight[1];                                                     \
     const int w = s->planewidth[1];                                                      \
-    const int slice_start = (h * jobnr) / nb_jobs;                                       \
-    const int slice_end = (h * (jobnr+1)) / nb_jobs;                                     \
+    const int slice_start = ff_slice_pos(h, jobnr, nb_jobs);                             \
+    const int slice_end = ff_slice_pos(h, jobnr + 1, nb_jobs);                           \
     type *out_uptr = (type *)(out->data[1] + slice_start * out_ulinesize);               \
     type *out_vptr = (type *)(out->data[2] + slice_start * out_vlinesize);               \
                                                                                          \
@@ -289,14 +289,14 @@ static const AVFilterPad inputs[] = {
 
 AVFILTER_DEFINE_CLASS(chromanr);
 
-const AVFilter ff_vf_chromanr = {
-    .name          = "chromanr",
-    .description   = NULL_IF_CONFIG_SMALL("Reduce chrominance noise."),
+const FFFilter ff_vf_chromanr = {
+    .p.name        = "chromanr",
+    .p.description = NULL_IF_CONFIG_SMALL("Reduce chrominance noise."),
+    .p.priv_class  = &chromanr_class,
+    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
     .priv_size     = sizeof(ChromaNRContext),
-    .priv_class    = &chromanr_class,
     FILTER_OUTPUTS(ff_video_default_filterpad),
     FILTER_INPUTS(inputs),
     FILTER_PIXFMTS_ARRAY(pix_fmts),
-    .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
     .process_command = ff_filter_process_command,
 };

@@ -52,8 +52,8 @@ static int cas_slice8(AVFilterContext *avctx, void *arg, int jobnr, int nb_jobs)
     AVFrame *in = s->in;
 
     for (int p = 0; p < s->nb_planes; p++) {
-        const int slice_start = (s->planeheight[p] * jobnr) / nb_jobs;
-        const int slice_end = (s->planeheight[p] * (jobnr+1)) / nb_jobs;
+        const int slice_start = ff_slice_pos(s->planeheight[p], jobnr, nb_jobs);
+        const int slice_end = ff_slice_pos(s->planeheight[p], jobnr + 1, nb_jobs);
         const int linesize = out->linesize[p];
         const int in_linesize = in->linesize[p];
         const int w = s->planewidth[p];
@@ -119,8 +119,8 @@ static int cas_slice16(AVFilterContext *avctx, void *arg, int jobnr, int nb_jobs
     AVFrame *in = s->in;
 
     for (int p = 0; p < s->nb_planes; p++) {
-        const int slice_start = (s->planeheight[p] * jobnr) / nb_jobs;
-        const int slice_end = (s->planeheight[p] * (jobnr+1)) / nb_jobs;
+        const int slice_start = ff_slice_pos(s->planeheight[p], jobnr, nb_jobs);
+        const int slice_end = ff_slice_pos(s->planeheight[p], jobnr + 1, nb_jobs);
         const int linesize = out->linesize[p] / 2;
         const int in_linesize = in->linesize[p] / 2;
         const int w = s->planewidth[p];
@@ -265,14 +265,14 @@ static const AVOption cas_options[] = {
 
 AVFILTER_DEFINE_CLASS(cas);
 
-const AVFilter ff_vf_cas = {
-    .name          = "cas",
-    .description   = NULL_IF_CONFIG_SMALL("Contrast Adaptive Sharpen."),
+const FFFilter ff_vf_cas = {
+    .p.name        = "cas",
+    .p.description = NULL_IF_CONFIG_SMALL("Contrast Adaptive Sharpen."),
+    .p.priv_class  = &cas_class,
+    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
     .priv_size     = sizeof(CASContext),
-    .priv_class    = &cas_class,
     FILTER_INPUTS(cas_inputs),
     FILTER_OUTPUTS(ff_video_default_filterpad),
     FILTER_PIXFMTS_ARRAY(pixel_fmts),
-    .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
     .process_command = ff_filter_process_command,
 };

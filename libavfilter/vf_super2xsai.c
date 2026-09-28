@@ -76,8 +76,8 @@ static int super2xsai(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
     const uint32_t lo_pixel_mask = s->lo_pixel_mask;
     const uint32_t q_hi_pixel_mask = s->q_hi_pixel_mask;
     const uint32_t q_lo_pixel_mask = s->q_lo_pixel_mask;
-    const int slice_start = (height * jobnr) / nb_jobs;
-    const int slice_end = (height * (jobnr+1)) / nb_jobs;
+    const int slice_start = ff_slice_pos(height, jobnr, nb_jobs);
+    const int slice_end = ff_slice_pos(height, jobnr + 1, nb_jobs);
 
     /* Point to the first 4 lines, first line is duplicated */
     src_line[0] = src + src_linesize*FFMAX(slice_start - 1, 0);
@@ -349,12 +349,12 @@ static const AVFilterPad super2xsai_outputs[] = {
     },
 };
 
-const AVFilter ff_vf_super2xsai = {
-    .name          = "super2xsai",
-    .description   = NULL_IF_CONFIG_SMALL("Scale the input by 2x using the Super2xSaI pixel art algorithm."),
+const FFFilter ff_vf_super2xsai = {
+    .p.name        = "super2xsai",
+    .p.description = NULL_IF_CONFIG_SMALL("Scale the input by 2x using the Super2xSaI pixel art algorithm."),
+    .p.flags       = AVFILTER_FLAG_SLICE_THREADS,
     .priv_size     = sizeof(Super2xSaIContext),
     FILTER_INPUTS(super2xsai_inputs),
     FILTER_OUTPUTS(super2xsai_outputs),
     FILTER_PIXFMTS_ARRAY(pix_fmts),
-    .flags         = AVFILTER_FLAG_SLICE_THREADS,
 };

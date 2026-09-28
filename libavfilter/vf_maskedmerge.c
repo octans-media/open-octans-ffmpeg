@@ -76,8 +76,8 @@ static int filter_slice(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 
     for (p = 0; p < s->nb_planes; p++) {
         const int h = s->height[p];
-        const int slice_start = (h * jobnr) / nb_jobs;
-        const int slice_end = (h * (jobnr+1)) / nb_jobs;
+        const int slice_start = ff_slice_pos(h, jobnr, nb_jobs);
+        const int slice_end = ff_slice_pos(h, jobnr + 1, nb_jobs);
 
         if (!((1 << p) & s->planes)) {
             av_image_copy_plane(out->data[p] + slice_start * out->linesize[p],
@@ -201,7 +201,7 @@ static int config_input(AVFilterLink *inlink)
     else
         s->maskedmerge = maskedmerge32;
 
-#if ARCH_X86
+#if ARCH_X86 && HAVE_X86ASM
     ff_maskedmerge_init_x86(s);
 #endif
 
@@ -302,16 +302,17 @@ static const AVFilterPad maskedmerge_outputs[] = {
     },
 };
 
-const AVFilter ff_vf_maskedmerge = {
-    .name          = "maskedmerge",
-    .description   = NULL_IF_CONFIG_SMALL("Merge first stream with second stream using third stream as mask."),
+const FFFilter ff_vf_maskedmerge = {
+    .p.name        = "maskedmerge",
+    .p.description = NULL_IF_CONFIG_SMALL("Merge first stream with second stream using third stream as mask."),
+    .p.priv_class  = &maskedmerge_class,
+    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
+                     AVFILTER_FLAG_SLICE_THREADS,
     .priv_size     = sizeof(MaskedMergeContext),
     .uninit        = uninit,
     .activate      = activate,
     FILTER_INPUTS(maskedmerge_inputs),
     FILTER_OUTPUTS(maskedmerge_outputs),
     FILTER_PIXFMTS_ARRAY(pix_fmts),
-    .priv_class    = &maskedmerge_class,
-    .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL | AVFILTER_FLAG_SLICE_THREADS,
     .process_command = ff_filter_process_command,
 };

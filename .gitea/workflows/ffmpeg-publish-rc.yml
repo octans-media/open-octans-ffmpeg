@@ -1,0 +1,391 @@
+name: ffmpeg-publish-rc
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "RC 版本，例如 8.1.2-jellyfin4-octans13-rc.1"
+        required: true
+      recovery:
+        description: "仅在恢复同一版本的失败发布时填 true"
+        required: false
+        default: "false"
+
+env:
+  OCTANS_FFMPEG_CI_CACHE_ROOT: ${{ vars.OCTANS_FFMPEG_CI_CACHE_ROOT }}
+  OCTANS_GITEA_URL: ${{ vars.OCTANS_GITEA_URL }}
+  OCTANS_GITEA_HOST: ${{ vars.OCTANS_GITEA_HOST }}
+  OCTANS_GITEA_PACKAGE_OWNER: octans
+  OCTANS_GITEA_REPOSITORY_OWNER: octans
+  OCTANS_GITEA_REPOSITORY_NAME: open-octans-ffmpeg
+  OCTANS_GITEA_DEBIAN_DISTRIBUTION: resolute
+  OCTANS_GITEA_DEBIAN_COMPONENT: rc
+  OCTANS_FFMPEG_HARBOR_REGISTRY: ${{ vars.OCTANS_FFMPEG_HARBOR_REGISTRY }}
+  OCTANS_FFMPEG_HARBOR_REPOSITORY: ${{ vars.OCTANS_FFMPEG_HARBOR_REPOSITORY }}
+
+jobs:
+  rc:
+    runs-on: ${{ vars.OCTANS_FFMPEG_RUNNER }}
+    timeout-minutes: 480
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Plan RC tags
+        env:
+          OCTANS_FFMPEG_RC_INPUT_VERSION: ${{ github.event.inputs.version }}
+          OCTANS_FFMPEG_RC_RECOVERY_INPUT: ${{ github.event.inputs.recovery }}
+        run: |
+          set -euo pipefail
+
+          rc_version="${OCTANS_FFMPEG_RC_INPUT_VERSION:-}"
+          if [[ -z "${rc_version}" ]]; then
+            printf 'missing required RC version input\n' >&2
+            exit 1
+          fi
+
+          if [[ ! "${rc_version}" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)-jellyfin([1-9][0-9]*)-octans([1-9][0-9]*)-rc\.([1-9][0-9]*)$ ]]; then
+            printf 'invalid RC version: %s\n' "${rc_version}" >&2
+            printf 'expected format: 8.1.2-jellyfin4-octans13-rc.1\n' >&2
+            exit 1
+          fi
+
+          recovery="${OCTANS_FFMPEG_RC_RECOVERY_INPUT:-false}"
+          if [[ "${recovery}" != "true" && "${recovery}" != "false" ]]; then
+            printf 'invalid recovery input: %s\n' "${recovery}" >&2
+            printf 'expected: true or false\n' >&2
+            exit 1
+          fi
+
+          ffmpeg_version="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.${BASH_REMATCH[3]}"
+          jellyfin_revision="${BASH_REMATCH[4]}"
+          octans_revision="${BASH_REMATCH[5]}"
+          rc_number="${BASH_REMATCH[6]}"
+
+          ref_name="${GITHUB_REF_NAME:-}"
+          if [[ -z "${ref_name}" && "${GITHUB_REF:-}" == refs/heads/* ]]; then
+            ref_name="${GITHUB_REF#refs/heads/}"
+          fi
+          if [[ -z "${ref_name}" ]]; then
+            ref_name="$(git rev-parse --abbrev-ref HEAD)"
+          fi
+
+          revision="$(git rev-parse HEAD)"
+          if [[ "${ref_name}" != "main" ]]; then
+            if git rev-parse --verify origin/main >/dev/null 2>&1 \
+              && [[ "$(git rev-parse origin/main)" == "${revision}" ]]; then
+              ref_name="main"
+            else
+              printf 'FFmpeg RC publish must run from main, got: %s\n' "${ref_name}" >&2
+              exit 1
+            fi
+          fi
+
+          short_sha="${GITHUB_SHA:-${revision}}"
+          short_sha="${short_sha:0:8}"
+          ci_timestamp="$(date -u +%Y%m%d%H%M%S)"
+          ci_id="rc-${rc_version}-${ci_timestamp}-${short_sha}"
+
+          platform_tag="resolute-amd64"
+          build_root="${OCTANS_FFMPEG_CI_CACHE_ROOT}/${ci_id}"
+          build_version="octans-ffmpeg-full-linux-${ci_id}-ubuntu2604-system-runtime"
+          build_image="octans-ffmpeg-full-linux-build:ci-${ci_id}"
+          deb_version="${ffmpeg_version}+jellyfin${jellyfin_revision}+octans${octans_revision}~rc.${rc_number}"
+          image_version="${rc_version}-${platform_tag}"
+          local_image="octans-ffmpeg-full:ci-${ci_id}"
+          deb_path="${build_root}/dist/octans-ffmpeg-full_${deb_version}_amd64.deb"
+          release_asset_dir="${build_root}/release-assets"
+          release_tag="octans-ffmpeg-full-${rc_version}"
+          trace_tag="rc-${rc_version}-${short_sha}-${platform_tag}"
+
+          {
+            echo "OCTANS_FFMPEG_BUILD_ROOT=${build_root}"
+            echo "OCTANS_FFMPEG_BUILD_VERSION=${build_version}"
+            echo "OCTANS_FFMPEG_BUILD_IMAGE=${build_image}"
+            echo "OCTANS_FFMPEG_DEB_VERSION=${deb_version}"
+            echo "OCTANS_FFMPEG_IMAGE_VERSION=${image_version}"
+            echo "OCTANS_FFMPEG_LOCAL_IMAGE=${local_image}"
+            echo "OCTANS_FFMPEG_DEB_PATH=${deb_path}"
+            echo "OCTANS_FFMPEG_RELEASE_CHANNEL=rc"
+            echo "OCTANS_FFMPEG_RELEASE_VERSION=${rc_version}"
+            echo "OCTANS_FFMPEG_RELEASE_TAG=${release_tag}"
+            echo "OCTANS_FFMPEG_RELEASE_PRERELEASE=true"
+            echo "OCTANS_FFMPEG_RELEASE_ASSET_DIR=${release_asset_dir}"
+            echo "OCTANS_FFMPEG_RELEASE_RECOVERY=${recovery}"
+            echo "FIXED_TAG=${image_version}"
+            echo "TRACE_TAG=${trace_tag}"
+            echo "MOVING_TAG=rc"
+          } >> "${GITHUB_ENV}"
+
+          mkdir -p "${OCTANS_FFMPEG_CI_CACHE_ROOT}"
+          find "${OCTANS_FFMPEG_CI_CACHE_ROOT}" \
+            -mindepth 1 \
+            -maxdepth 1 \
+            -type d \
+            -mtime +7 \
+            -exec rm -rf {} +
+
+          printf 'FFmpeg RC publish plan:\n'
+          printf '  revision: %s\n' "${revision}"
+          printf '  rc_version: %s\n' "${rc_version}"
+          printf '  recovery: %s\n' "${recovery}"
+          printf '  deb_version: %s\n' "${deb_version}"
+          printf '  release_tag: %s\n' "${release_tag}"
+          printf '  prerelease: true\n'
+          printf '  debian_component: %s\n' "${OCTANS_GITEA_DEBIAN_COMPONENT}"
+          printf '  image_version: %s\n' "${image_version}"
+          printf '  target: %s:%s\n' "${OCTANS_FFMPEG_HARBOR_REPOSITORY}" "${image_version}"
+          printf '  target: %s:%s\n' "${OCTANS_FFMPEG_HARBOR_REPOSITORY}" "${trace_tag}"
+          printf '  target: %s:%s\n' "${OCTANS_FFMPEG_HARBOR_REPOSITORY}" "rc"
+
+      - name: Validate registry secrets
+        env:
+          OCTANS_GITEA_REGISTRY_USERNAME: ${{ secrets.OCTANS_GITEA_REGISTRY_USERNAME }}
+          OCTANS_GITEA_REGISTRY_TOKEN: ${{ secrets.OCTANS_GITEA_REGISTRY_TOKEN }}
+          OCTANS_HARBOR_REGISTRY_USERNAME: ${{ secrets.OCTANS_HARBOR_REGISTRY_USERNAME }}
+          OCTANS_HARBOR_REGISTRY_TOKEN: ${{ secrets.OCTANS_HARBOR_REGISTRY_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          required=(
+            OCTANS_GITEA_REGISTRY_USERNAME
+            OCTANS_GITEA_REGISTRY_TOKEN
+            OCTANS_HARBOR_REGISTRY_USERNAME
+            OCTANS_HARBOR_REGISTRY_TOKEN
+          )
+
+          for name in "${required[@]}"; do
+            if [[ -z "${!name:-}" ]]; then
+              printf 'missing required secret: %s\n' "${name}" >&2
+              exit 1
+            fi
+          done
+
+          printf 'registry secrets are present\n'
+
+      - name: Login Harbor registry
+        env:
+          OCTANS_HARBOR_REGISTRY_USERNAME: ${{ secrets.OCTANS_HARBOR_REGISTRY_USERNAME }}
+          OCTANS_HARBOR_REGISTRY_TOKEN: ${{ secrets.OCTANS_HARBOR_REGISTRY_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          printf '%s' "${OCTANS_HARBOR_REGISTRY_TOKEN}" \
+            | docker login "${OCTANS_FFMPEG_HARBOR_REGISTRY}" \
+              --username "${OCTANS_HARBOR_REGISTRY_USERNAME}" \
+              --password-stdin
+
+      - name: Check immutable RC tags are new
+        run: |
+          set -euo pipefail
+          . scripts/ci-retry-helpers.sh
+
+          if [[ "${OCTANS_FFMPEG_RELEASE_RECOVERY}" == "true" ]]; then
+            printf 'recovery mode enabled, immutable tag checks are deferred to publish script\n'
+            exit 0
+          fi
+
+          ensure_absent() {
+            local ref="$1"
+            local status
+
+            set +e
+            octans_ci_imagetools_ref_exists "${ref}"
+            status="$?"
+            set -e
+
+            case "${status}" in
+              0)
+                printf 'ref already exists, refusing to overwrite immutable tag: %s\n' "${ref}" >&2
+                exit 1
+                ;;
+              1)
+                return 0
+                ;;
+              *)
+                printf 'failed to verify immutable tag absence: %s\n' "${ref}" >&2
+                exit 1
+                ;;
+            esac
+          }
+
+          ensure_absent "${OCTANS_FFMPEG_HARBOR_REPOSITORY}:${FIXED_TAG}"
+          ensure_absent "${OCTANS_FFMPEG_HARBOR_REPOSITORY}:${TRACE_TAG}"
+
+      - name: Validate release asset prerequisites
+        run: |
+          set -euo pipefail
+          . scripts/ci-retry-helpers.sh
+
+          required_commands=(
+            docker
+            git
+            jq
+            zstd
+          )
+
+          for command_name in "${required_commands[@]}"; do
+            if ! command -v "${command_name}" >/dev/null 2>&1; then
+              printf 'missing required command for release assets: %s\n' "${command_name}" >&2
+              exit 1
+            fi
+          done
+
+          if [[ -n "$(git status --porcelain)" ]]; then
+            printf 'refusing release from dirty worktree\n' >&2
+            git status --short >&2
+            exit 1
+          fi
+
+          base_image_ref="ubuntu:26.04"
+          base_image_digest="$(octans_ci_imagetools_digest "${base_image_ref}")"
+          if [[ -z "${base_image_digest}" ]]; then
+            printf 'failed to resolve Docker base image digest: %s\n' "${base_image_ref}" >&2
+            exit 1
+          fi
+
+          {
+            echo "OCTANS_FFMPEG_BASE_IMAGE_REF=${base_image_ref}"
+            echo "OCTANS_FFMPEG_BASE_IMAGE_DIGEST=${base_image_digest}"
+          } >> "${GITHUB_ENV}"
+
+          printf 'release asset prerequisites are ready\n'
+          printf '  base_image: %s@%s\n' "${base_image_ref}" "${base_image_digest}"
+
+      - name: Build Octans FFmpeg runtime
+        run: |
+          set -euo pipefail
+          export OCTANS_FFMPEG_VERSION="${OCTANS_FFMPEG_BUILD_VERSION}"
+          scripts/build-octans-full-linux.sh
+
+      - name: Verify staged runtime
+        run: |
+          set -euo pipefail
+          scripts/verify-full-linux.sh \
+            "${OCTANS_FFMPEG_BUILD_ROOT}/stage/current/opt/octans-ffmpeg"
+
+      - name: Package Debian artifact
+        run: |
+          set -euo pipefail
+          scripts/package-deb.sh \
+            --stage "${OCTANS_FFMPEG_BUILD_ROOT}/stage/current/opt/octans-ffmpeg" \
+            --version "${OCTANS_FFMPEG_DEB_VERSION}" \
+            --output-dir "${OCTANS_FFMPEG_BUILD_ROOT}/dist"
+
+          test -f "${OCTANS_FFMPEG_DEB_PATH}"
+          sha256sum "${OCTANS_FFMPEG_DEB_PATH}"
+
+      - name: Verify Debian install
+        run: |
+          set -euo pipefail
+          scripts/verify-deb-install.sh "${OCTANS_FFMPEG_DEB_PATH}"
+
+      - name: Build runtime image
+        run: |
+          set -euo pipefail
+          scripts/build-runtime-image.sh \
+            --deb "${OCTANS_FFMPEG_DEB_PATH}" \
+            --version "${OCTANS_FFMPEG_IMAGE_VERSION}" \
+            --tag "${OCTANS_FFMPEG_LOCAL_IMAGE}" \
+            --no-registry-tags
+
+      - name: Verify runtime image
+        run: |
+          set -euo pipefail
+          scripts/verify-runtime-image.sh "${OCTANS_FFMPEG_LOCAL_IMAGE}"
+          scripts/verify-runtime-image-gpu.sh "${OCTANS_FFMPEG_LOCAL_IMAGE}"
+
+      - name: Publish RC release
+        env:
+          OCTANS_GITEA_PACKAGE_USERNAME: ${{ secrets.OCTANS_GITEA_REGISTRY_USERNAME }}
+          OCTANS_GITEA_PACKAGE_TOKEN: ${{ secrets.OCTANS_GITEA_REGISTRY_TOKEN }}
+        run: |
+          set -euo pipefail
+          scripts/publish-ffmpeg-runtime-release.sh \
+            --deb "${OCTANS_FFMPEG_DEB_PATH}" \
+            --local-image "${OCTANS_FFMPEG_LOCAL_IMAGE}" \
+            --fixed-tag "${FIXED_TAG}" \
+            --trace-tag "${TRACE_TAG}" \
+            --moving-tag "${MOVING_TAG}" \
+            --recovery "${OCTANS_FFMPEG_RELEASE_RECOVERY}"
+
+      - name: Generate RC release assets
+        run: |
+          set -euo pipefail
+          scripts/generate-release-assets.sh \
+            --channel "${OCTANS_FFMPEG_RELEASE_CHANNEL}" \
+            --stage "${OCTANS_FFMPEG_BUILD_ROOT}/stage/current/opt/octans-ffmpeg" \
+            --build-root "${OCTANS_FFMPEG_BUILD_ROOT}" \
+            --build-version "${OCTANS_FFMPEG_BUILD_VERSION}" \
+            --deb "${OCTANS_FFMPEG_DEB_PATH}" \
+            --version "${OCTANS_FFMPEG_RELEASE_VERSION}" \
+            --deb-version "${OCTANS_FFMPEG_DEB_VERSION}" \
+            --image-digest "${OCTANS_FFMPEG_PUBLISHED_DIGEST}" \
+            --fixed-tag "${FIXED_TAG}" \
+            --trace-tag "${TRACE_TAG}" \
+            --moving-tag "${MOVING_TAG}" \
+            --base-image-ref "${OCTANS_FFMPEG_BASE_IMAGE_REF}" \
+            --base-image-digest "${OCTANS_FFMPEG_BASE_IMAGE_DIGEST}" \
+            --release-dir "${OCTANS_FFMPEG_RELEASE_ASSET_DIR}"
+
+      - name: Publish RC Gitea Release
+        env:
+          OCTANS_GITEA_RELEASE_TOKEN: ${{ secrets.OCTANS_GITEA_REGISTRY_TOKEN }}
+        run: |
+          set -euo pipefail
+          scripts/publish-gitea-release-assets.sh \
+            --owner "${OCTANS_GITEA_REPOSITORY_OWNER}" \
+            --repo "${OCTANS_GITEA_REPOSITORY_NAME}" \
+            --tag "${OCTANS_FFMPEG_RELEASE_TAG}" \
+            --title "octans-ffmpeg-full ${OCTANS_FFMPEG_RELEASE_VERSION}" \
+            --asset-dir "${OCTANS_FFMPEG_RELEASE_ASSET_DIR}" \
+            --target "${GITHUB_SHA}" \
+            --prerelease "${OCTANS_FFMPEG_RELEASE_PRERELEASE}" \
+            --recovery "${OCTANS_FFMPEG_RELEASE_RECOVERY}"
+
+      - name: Report published artifacts
+        run: |
+          set -euo pipefail
+
+          printf 'FFmpeg RC publish completed:\n'
+          printf '  release_tag: %s\n' "${OCTANS_FFMPEG_RELEASE_TAG}"
+          printf '  prerelease: %s\n' "${OCTANS_FFMPEG_RELEASE_PRERELEASE}"
+          printf '  deb: %s\n' "${OCTANS_FFMPEG_DEB_PATH}"
+          printf '  deb_sha256: '
+          sha256sum "${OCTANS_FFMPEG_DEB_PATH}" | awk '{print $1}'
+          printf '  debian_component: %s\n' "${OCTANS_GITEA_DEBIAN_COMPONENT}"
+          printf '  fixed_tag: %s\n' "${FIXED_TAG}"
+          printf '  trace_tag: %s\n' "${TRACE_TAG}"
+          printf '  moving_tag: %s\n' "${MOVING_TAG}"
+          printf '  docker_digest: %s\n' "${OCTANS_FFMPEG_PUBLISHED_DIGEST}"
+          printf '  release_assets: %s\n' "${OCTANS_FFMPEG_RELEASE_ASSET_DIR}"
+          find "${OCTANS_FFMPEG_RELEASE_ASSET_DIR}" \
+            -maxdepth 1 \
+            -type f \
+            -printf '    - %f\n' \
+            | sort
+
+      - name: Cleanup local images and logout registries
+        if: always()
+        run: |
+          set -euo pipefail
+
+          for ref in \
+            "${OCTANS_FFMPEG_HARBOR_REPOSITORY}:${FIXED_TAG:-}" \
+            "${OCTANS_FFMPEG_HARBOR_REPOSITORY}:${TRACE_TAG:-}" \
+            "${OCTANS_FFMPEG_HARBOR_REPOSITORY}:${MOVING_TAG:-}"; do
+            if [[ "${ref}" != *: ]]; then
+              docker image rm "${ref}" >/dev/null 2>&1 || true
+            fi
+          done
+
+          if [[ -n "${OCTANS_FFMPEG_LOCAL_IMAGE:-}" ]]; then
+            docker image rm "${OCTANS_FFMPEG_LOCAL_IMAGE}" >/dev/null 2>&1 || true
+          fi
+
+          if [[ -n "${OCTANS_FFMPEG_BUILD_IMAGE:-}" ]]; then
+            docker image rm "${OCTANS_FFMPEG_BUILD_IMAGE}" >/dev/null 2>&1 || true
+          fi
+
+          docker logout "${OCTANS_FFMPEG_HARBOR_REGISTRY}" >/dev/null 2>&1 || true

@@ -103,8 +103,8 @@ static int do_slice_##name##_##xall(AVFilterContext *ctx,            \
     const int step = s->step;                                        \
     const int width = frame->width;                                  \
     const int process_h = frame->height;                             \
-    const int slice_start = (process_h *  jobnr   ) / nb_jobs;       \
-    const int slice_end   = (process_h * (jobnr+1)) / nb_jobs;       \
+    const int slice_start = ff_slice_pos(process_h, jobnr, nb_jobs); \
+    const int slice_end   = ff_slice_pos(process_h, jobnr + 1, nb_jobs); \
     const ptrdiff_t linesize = frame->linesize[0] / sizeof(type);    \
     type *row = (type *)frame->data[0] + linesize * slice_start;     \
     const uint8_t offset_r = s->rgba_map[R];                         \
@@ -458,14 +458,14 @@ static const AVOption huesaturation_options[] = {
 
 AVFILTER_DEFINE_CLASS(huesaturation);
 
-const AVFilter ff_vf_huesaturation = {
-    .name            = "huesaturation",
-    .description     = NULL_IF_CONFIG_SMALL("Apply hue-saturation-intensity adjustments."),
+const FFFilter ff_vf_huesaturation = {
+    .p.name          = "huesaturation",
+    .p.description   = NULL_IF_CONFIG_SMALL("Apply hue-saturation-intensity adjustments."),
+    .p.priv_class    = &huesaturation_class,
+    .p.flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
     .priv_size       = sizeof(HueSaturationContext),
-    .priv_class      = &huesaturation_class,
     FILTER_INPUTS(huesaturation_inputs),
     FILTER_OUTPUTS(ff_video_default_filterpad),
     FILTER_PIXFMTS_ARRAY(pixel_fmts),
-    .flags           = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
     .process_command = ff_filter_process_command,
 };

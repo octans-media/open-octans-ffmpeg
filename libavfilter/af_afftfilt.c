@@ -233,8 +233,8 @@ static int tx_channel(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 {
     AFFTFiltContext *s = ctx->priv;
     const int channels = s->channels;
-    const int start = (channels * jobnr) / nb_jobs;
-    const int end = (channels * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(channels, jobnr, nb_jobs);
+    const int end = ff_slice_pos(channels, jobnr + 1, nb_jobs);
 
     for (int ch = start; ch < end; ch++) {
         AVComplexFloat *fft_in = s->fft_in[ch];
@@ -253,8 +253,8 @@ static int filter_channel(AVFilterContext *ctx, void *arg, int jobnr, int nb_job
     const float *window_lut = s->window_func_lut;
     const float f = sqrtf(1.f - s->overlap);
     const int channels = s->channels;
-    const int start = (channels * jobnr) / nb_jobs;
-    const int end = (channels * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(channels, jobnr, nb_jobs);
+    const int end = ff_slice_pos(channels, jobnr + 1, nb_jobs);
     double values[VAR_VARS_NB];
 
     memcpy(values, arg, sizeof(values));
@@ -439,16 +439,16 @@ static const AVFilterPad inputs[] = {
     },
 };
 
-const AVFilter ff_af_afftfilt = {
-    .name            = "afftfilt",
-    .description     = NULL_IF_CONFIG_SMALL("Apply arbitrary expressions to samples in frequency domain."),
+const FFFilter ff_af_afftfilt = {
+    .p.name          = "afftfilt",
+    .p.description   = NULL_IF_CONFIG_SMALL("Apply arbitrary expressions to samples in frequency domain."),
+    .p.priv_class    = &afftfilt_class,
+    .p.flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
+                       AVFILTER_FLAG_SLICE_THREADS,
     .priv_size       = sizeof(AFFTFiltContext),
-    .priv_class      = &afftfilt_class,
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(ff_audio_default_filterpad),
     FILTER_SINGLE_SAMPLEFMT(AV_SAMPLE_FMT_FLTP),
     .activate        = activate,
     .uninit          = uninit,
-    .flags           = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
-                       AVFILTER_FLAG_SLICE_THREADS,
 };

@@ -549,8 +549,8 @@ static int denoise(AVFilterContext *ctx, void *arg,
         PlaneContext *p = &s->planes[plane];
         const int nox = p->nox;
         const int noy = p->noy;
-        const int slice_start = (noy * jobnr) / nb_jobs;
-        const int slice_end = (noy * (jobnr+1)) / nb_jobs;
+        const int slice_start = ff_slice_pos(noy, jobnr, nb_jobs);
+        const int slice_end = ff_slice_pos(noy, jobnr + 1, nb_jobs);
 
         if (!((1 << plane) & s->planesf) || ctx->is_disabled)
             continue;
@@ -747,16 +747,16 @@ static const AVFilterPad fftdnoiz_outputs[] = {
     },
 };
 
-const AVFilter ff_vf_fftdnoiz = {
-    .name          = "fftdnoiz",
-    .description   = NULL_IF_CONFIG_SMALL("Denoise frames using 3D FFT."),
+const FFFilter ff_vf_fftdnoiz = {
+    .p.name        = "fftdnoiz",
+    .p.description = NULL_IF_CONFIG_SMALL("Denoise frames using 3D FFT."),
+    .p.priv_class  = &fftdnoiz_class,
+    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
+                     AVFILTER_FLAG_SLICE_THREADS,
     .priv_size     = sizeof(FFTdnoizContext),
     .uninit        = uninit,
     FILTER_INPUTS(fftdnoiz_inputs),
     FILTER_OUTPUTS(fftdnoiz_outputs),
     FILTER_PIXFMTS_ARRAY(pix_fmts),
-    .priv_class    = &fftdnoiz_class,
-    .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
-                     AVFILTER_FLAG_SLICE_THREADS,
     .process_command = ff_filter_process_command,
 };

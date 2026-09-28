@@ -215,8 +215,8 @@ static int vif_filter1d(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
     int dst_stride = td->dst_stride;
     int filt_w = td->filter_width;
     float *temp = td->temp[jobnr];
-    const int slice_start = (h * jobnr) / nb_jobs;
-    const int slice_end = (h * (jobnr+1)) / nb_jobs;
+    const int slice_start = ff_slice_pos(h, jobnr, nb_jobs);
+    const int slice_end = ff_slice_pos(h, jobnr + 1, nb_jobs);
 
     for (int i = slice_start; i < slice_end; i++) {
         /** Vertical pass. */
@@ -627,18 +627,18 @@ static const AVFilterPad vif_outputs[] = {
     },
 };
 
-const AVFilter ff_vf_vif = {
-    .name          = "vif",
-    .description   = NULL_IF_CONFIG_SMALL("Calculate the VIF between two video streams."),
+const FFFilter ff_vf_vif = {
+    .p.name        = "vif",
+    .p.description = NULL_IF_CONFIG_SMALL("Calculate the VIF between two video streams."),
+    .p.priv_class  = &vif_class,
+    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
+                     AVFILTER_FLAG_SLICE_THREADS             |
+                     AVFILTER_FLAG_METADATA_ONLY,
     .preinit       = vif_framesync_preinit,
     .uninit        = uninit,
     .priv_size     = sizeof(VIFContext),
-    .priv_class    = &vif_class,
     .activate      = activate,
     FILTER_INPUTS(vif_inputs),
     FILTER_OUTPUTS(vif_outputs),
     FILTER_PIXFMTS_ARRAY(pix_fmts),
-    .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
-                     AVFILTER_FLAG_SLICE_THREADS             |
-                     AVFILTER_FLAG_METADATA_ONLY,
 };

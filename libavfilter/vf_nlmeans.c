@@ -292,8 +292,8 @@ static int nlmeans_slice(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs
     const struct thread_data *td = arg;
     const ptrdiff_t src_linesize = td->src_linesize;
     const int process_h = td->endy - td->starty;
-    const int slice_start = (process_h *  jobnr   ) / nb_jobs;
-    const int slice_end   = (process_h * (jobnr+1)) / nb_jobs;
+    const int slice_start = ff_slice_pos(process_h, jobnr, nb_jobs);
+    const int slice_end   = ff_slice_pos(process_h, jobnr + 1, nb_jobs);
     const int starty = td->starty + slice_start;
     const int endy   = td->starty + slice_end;
     const int p = td->p;
@@ -472,15 +472,15 @@ static const AVFilterPad nlmeans_inputs[] = {
     },
 };
 
-const AVFilter ff_vf_nlmeans = {
-    .name          = "nlmeans",
-    .description   = NULL_IF_CONFIG_SMALL("Non-local means denoiser."),
+const FFFilter ff_vf_nlmeans = {
+    .p.name        = "nlmeans",
+    .p.description = NULL_IF_CONFIG_SMALL("Non-local means denoiser."),
+    .p.priv_class  = &nlmeans_class,
+    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
     .priv_size     = sizeof(NLMeansContext),
     .init          = init,
     .uninit        = uninit,
     FILTER_INPUTS(nlmeans_inputs),
     FILTER_OUTPUTS(ff_video_default_filterpad),
     FILTER_PIXFMTS_ARRAY(pix_fmts),
-    .priv_class    = &nlmeans_class,
-    .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
 };

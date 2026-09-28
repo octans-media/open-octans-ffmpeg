@@ -172,9 +172,11 @@ static const AVOption v360_options[] = {
 
 AVFILTER_DEFINE_CLASS(v360);
 
-static int query_formats(AVFilterContext *ctx)
+static int query_formats(const AVFilterContext *ctx,
+                         AVFilterFormatsConfig **cfg_in,
+                         AVFilterFormatsConfig **cfg_out)
 {
-    V360Context *s = ctx->priv;
+    const V360Context *s = ctx->priv;
     static const enum AVPixelFormat pix_fmts[] = {
         // YUVA444
         AV_PIX_FMT_YUVA444P,   AV_PIX_FMT_YUVA444P9,
@@ -250,7 +252,8 @@ static int query_formats(AVFilterContext *ctx)
         AV_PIX_FMT_NONE
     };
 
-    return ff_set_common_formats_from_list(ctx, s->alpha ? alpha_pix_fmts : pix_fmts);
+    return ff_set_pixel_formats_from_list2(ctx, cfg_in, cfg_out,
+                                            s->alpha ? alpha_pix_fmts : pix_fmts);
 }
 
 #define DEFINE_REMAP1_LINE(bits, div)                                                    \
@@ -288,7 +291,7 @@ static int remap##ws##_##bits##bit_slice(AVFilterContext *ctx, void *arg, int jo
                                                                                                            \
     av_assert1(s->nb_planes <= AV_VIDEO_MAX_PLANES);                                                       \
                                                                                                            \
-    for (int stereo = 0; stereo < 1 + s->out_stereo > STEREO_2D; stereo++) {                               \
+    for (int stereo = 0; stereo < 1 + (s->out_stereo > STEREO_2D); stereo++) {                               \
         for (int plane = 0; plane < s->nb_planes; plane++) {                                               \
             const unsigned map = s->map[plane];                                                            \
             const int in_linesize  = in->linesize[plane];                                                  \
@@ -305,13 +308,13 @@ static int remap##ws##_##bits##bit_slice(AVFilterContext *ctx, void *arg, int jo
             const int width = s->pr_width[plane];                                                          \
             const int height = s->pr_height[plane];                                                        \
                                                                                                            \
-            const int slice_start = (height *  jobnr     ) / nb_jobs;                                      \
-            const int slice_end   = (height * (jobnr + 1)) / nb_jobs;                                      \
+            const int slice_start = ff_slice_pos(height, jobnr, nb_jobs);                                  \
+            const int slice_end   = ff_slice_pos(height, jobnr + 1, nb_jobs);                              \
                                                                                                            \
             for (int y = slice_start; y < slice_end && !mask; y++) {                                       \
-                const int16_t *const u = r->u[map] + (y - slice_start) * uv_linesize * ws * ws;            \
-                const int16_t *const v = r->v[map] + (y - slice_start) * uv_linesize * ws * ws;            \
-                const int16_t *const ker = r->ker[map] + (y - slice_start) * uv_linesize * ws * ws;        \
+                const int16_t *const u = r->u[map] + (y - slice_start) * (int64_t)uv_linesize * ws * ws;    \
+                const int16_t *const v = r->v[map] + (y - slice_start) * (int64_t)uv_linesize * ws * ws;    \
+                const int16_t *const ker = r->ker[map] + (y - slice_start) * (int64_t)uv_linesize * ws * ws;\
                                                                                                            \
                 s->remap_line(dst + y * out_linesize, width, src, in_linesize, u, v, ker);                 \
             }                                                                                              \
@@ -391,7 +394,7 @@ void ff_v360_init(V360Context *s, int depth)
         break;
     }
 
-#if ARCH_X86
+#if ARCH_X86 && HAVE_X86ASM
     ff_v360_init_x86(s, depth);
 #endif
 }
@@ -4243,8 +4246,8 @@ static int v360_slice(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
         const int height = s->pr_height[p];
         const int in_width = s->inplanewidth[p];
         const int in_height = s->inplaneheight[p];
-        const int slice_start = (height *  jobnr     ) / nb_jobs;
-        const int slice_end   = (height * (jobnr + 1)) / nb_jobs;
+        const int slice_start = ff_slice_pos(height, jobnr, nb_jobs);
+        const int slice_end   = ff_slice_pos(height, jobnr + 1, nb_jobs);
         const int elements = s->elements;
         float du, dv;
         float vec[3];
@@ -4252,9 +4255,9 @@ static int v360_slice(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 
         for (int j = slice_start; j < slice_end; j++) {
             for (int i = 0; i < width; i++) {
-                int16_t *u = r->u[p] + ((j - slice_start) * uv_linesize + i) * elements;
-                int16_t *v = r->v[p] + ((j - slice_start) * uv_linesize + i) * elements;
-                int16_t *ker = r->ker[p] + ((j - slice_start) * uv_linesize + i) * elements;
+                int16_t *u = r->u[p] + ((j - slice_start) * (int64_t)uv_linesize + i) * elements;
+                int16_t *v = r->v[p] + ((j - slice_start) * (int64_t)uv_linesize + i) * elements;
+                int16_t *ker = r->ker[p] + ((j - slice_start) * (int64_t)uv_linesize + i) * elements;
                 uint8_t  *mask8  = (p || !r->mask) ? NULL : r->mask + ((j - slice_start) * s->pr_width[0] + i);
                 uint16_t *mask16 = (p || !r->mask) ? NULL : (uint16_t *)r->mask + ((j - slice_start) * s->pr_width[0] + i);
                 int in_mask, out_mask;
@@ -4289,6 +4292,20 @@ static int v360_slice(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
         }
     }
 
+    return 0;
+}
+
+static int get_output_dimension(AVFilterContext *ctx, const char *name,
+                                float val, int *dim)
+{
+    if (!isfinite(val) || val < 1.f || val > INT16_MAX) {
+        av_log(ctx, AV_LOG_ERROR,
+               "Output %s %g is outside the allowed range [1, %d].\n",
+               name, val, INT16_MAX);
+        return AVERROR(EINVAL);
+    }
+
+    *dim = lrintf(val);
     return 0;
 }
 
@@ -4461,6 +4478,15 @@ static int config_output(AVFilterLink *outlink)
 
     if (s->in_transpose)
         FFSWAP(int, s->in_width, s->in_height);
+
+    // The remap code stores input coordinates in int16_t
+    if (s->in_width < 1 || s->in_width > INT16_MAX ||
+        s->in_height < 1 || s->in_height > INT16_MAX) {
+        av_log(ctx, AV_LOG_ERROR,
+               "Input dimensions %dx%d are outside the allowed range [1, %d].\n",
+               s->in_width, s->in_height, INT16_MAX);
+        return AVERROR(EINVAL);
+    }
 
     switch (s->in) {
     case EQUIRECTANGULAR:
@@ -4779,11 +4805,17 @@ static int config_output(AVFilterLink *outlink)
     if (s->width > 0 && s->height <= 0 && s->h_fov > 0.f && s->v_fov > 0.f &&
         s->out == FLAT && s->d_fov == 0.f) {
         w = s->width;
-        h = w / tanf(s->h_fov * M_PI / 360.f) * tanf(s->v_fov * M_PI / 360.f);
+        err = get_output_dimension(ctx, "height",
+                                   w / tanf(s->h_fov * M_PI / 360.f) * tanf(s->v_fov * M_PI / 360.f), &h);
+        if (err < 0)
+            return err;
     } else if (s->width <= 0 && s->height > 0 && s->h_fov > 0.f && s->v_fov > 0.f &&
         s->out == FLAT && s->d_fov == 0.f) {
         h = s->height;
-        w = h / tanf(s->v_fov * M_PI / 360.f) * tanf(s->h_fov * M_PI / 360.f);
+        err = get_output_dimension(ctx, "width",
+                                   h / tanf(s->v_fov * M_PI / 360.f) * tanf(s->h_fov * M_PI / 360.f), &w);
+        if (err < 0)
+            return err;
     } else if (s->width > 0 && s->height > 0) {
         w = s->width;
         h = s->height;
@@ -4796,6 +4828,13 @@ static int config_output(AVFilterLink *outlink)
 
         if (s->in_transpose)
             FFSWAP(int, w, h);
+    }
+
+    if (w < 1 || w > INT16_MAX || h < 1 || h > INT16_MAX) {
+        av_log(ctx, AV_LOG_ERROR,
+               "Output dimensions %dx%d are outside the allowed range [1, %d].\n",
+               w, h, INT16_MAX);
+        return AVERROR(EINVAL);
     }
 
     s->width  = w;
@@ -4992,16 +5031,16 @@ static const AVFilterPad outputs[] = {
     },
 };
 
-const AVFilter ff_vf_v360 = {
-    .name          = "v360",
-    .description   = NULL_IF_CONFIG_SMALL("Convert 360 projection of video."),
+const FFFilter ff_vf_v360 = {
+    .p.name        = "v360",
+    .p.description = NULL_IF_CONFIG_SMALL("Convert 360 projection of video."),
+    .p.priv_class  = &v360_class,
+    .p.flags       = AVFILTER_FLAG_SLICE_THREADS,
     .priv_size     = sizeof(V360Context),
     .init          = init,
     .uninit        = uninit,
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(outputs),
-    FILTER_QUERY_FUNC(query_formats),
-    .priv_class    = &v360_class,
-    .flags         = AVFILTER_FLAG_SLICE_THREADS,
+    FILTER_QUERY_FUNC2(query_formats),
     .process_command = process_command,
 };

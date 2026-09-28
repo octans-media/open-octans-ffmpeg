@@ -156,8 +156,8 @@ static int fir_channel(AVFilterContext *ctx, AVFrame *out, int ch)
 static int fir_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 {
     AVFrame *out = arg;
-    const int start = (out->ch_layout.nb_channels * jobnr) / nb_jobs;
-    const int end = (out->ch_layout.nb_channels * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(out->ch_layout.nb_channels, jobnr, nb_jobs);
+    const int end = ff_slice_pos(out->ch_layout.nb_channels, jobnr + 1, nb_jobs);
 
     for (int ch = start; ch < end; ch++)
         fir_channel(ctx, out, ch);
@@ -569,7 +569,7 @@ static int query_formats(const AVFilterContext *ctx,
         }
     }
 
-    if ((ret = ff_set_common_formats_from_list2(ctx, cfg_in, cfg_out,
+    if ((ret = ff_set_sample_formats_from_list2(ctx, cfg_in, cfg_out,
                                                 sample_fmts[s->precision])) < 0)
         return ret;
 
@@ -777,18 +777,18 @@ static const AVFilterPad outputs[] = {
     },
 };
 
-const AVFilter ff_af_afir = {
-    .name          = "afir",
-    .description   = NULL_IF_CONFIG_SMALL("Apply Finite Impulse Response filter with supplied coefficients in additional stream(s)."),
+const FFFilter ff_af_afir = {
+    .p.name        = "afir",
+    .p.description = NULL_IF_CONFIG_SMALL("Apply Finite Impulse Response filter with supplied coefficients in additional stream(s)."),
+    .p.priv_class  = &afir_class,
+    .p.flags       = AVFILTER_FLAG_DYNAMIC_INPUTS  |
+                     AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
+                     AVFILTER_FLAG_SLICE_THREADS,
     .priv_size     = sizeof(AudioFIRContext),
-    .priv_class    = &afir_class,
     FILTER_QUERY_FUNC2(query_formats),
     FILTER_OUTPUTS(outputs),
     .init          = init,
     .activate      = activate,
     .uninit        = uninit,
     .process_command = process_command,
-    .flags         = AVFILTER_FLAG_DYNAMIC_INPUTS  |
-                     AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
-                     AVFILTER_FLAG_SLICE_THREADS,
 };

@@ -1,46 +1,55 @@
-FFmpeg README
-=============
+# Octans FFmpeg
 
-FFmpeg is a collection of libraries and tools to process multimedia content
-such as audio, video, subtitles and related metadata.
+Octans FFmpeg is a GPLv3 server-side FFmpeg full runtime. The current tree is FFmpeg 8.1.2 plus the Jellyfin patch series used for playback, transcoding, subtitles, and hardware acceleration.
 
-## Libraries
+This build is configured with `--enable-gpl`, `--enable-version3`, `--enable-libx264`, and `--enable-libx265`. The resulting binaries are GPLv3. Corresponding source is this repository.
 
-* `libavcodec` provides implementation of a wider range of codecs.
-* `libavformat` implements streaming protocols, container formats and basic I/O access.
-* `libavutil` includes hashers, decompressors and miscellaneous utility functions.
-* `libavfilter` provides means to alter decoded audio and video through a directed graph of connected filters.
-* `libavdevice` provides an abstraction to access capture and playback devices.
-* `libswresample` implements audio mixing and resampling routines.
-* `libswscale` implements color conversion and scaling routines.
+Source: <https://github.com/octans-media/open-octans-ffmpeg>
 
-## Tools
+## Build
 
-* [ffmpeg](https://ffmpeg.org/ffmpeg.html) is a command line toolbox to
-  manipulate, convert and stream multimedia content.
-* [ffplay](https://ffmpeg.org/ffplay.html) is a minimalistic multimedia player.
-* [ffprobe](https://ffmpeg.org/ffprobe.html) is a simple analysis tool to inspect
-  multimedia content.
-* Additional small tools such as `aviocat`, `ismindex` and `qt-faststart`.
+The supported host is Ubuntu 26.04 amd64, with Docker.
 
-## Documentation
+```bash
+scripts/build-octans-full-linux.sh
+scripts/verify-full-linux.sh .build/stage/current/opt/octans-ffmpeg
+scripts/package-deb.sh
+scripts/verify-deb-install.sh
+scripts/build-runtime-image.sh --no-registry-tags
+scripts/verify-runtime-image.sh
+```
 
-The offline documentation is available in the **doc/** directory.
+`scripts/build-octans-full-linux.sh` applies `debian/patches/series` with `dpkg-source --before-build`, then configures and installs into `.build/` unless `OCTANS_FFMPEG_BUILD_ROOT` is set.
 
-The online documentation is available in the main [website](https://ffmpeg.org)
-and in the [wiki](https://trac.ffmpeg.org).
+The runtime image install paths are:
 
-### Examples
+```text
+/opt/octans-ffmpeg/bin/ffmpeg
+/opt/octans-ffmpeg/bin/ffprobe
+/opt/octans-ffmpeg/bin/octans-ffmpeg-capabilities
+```
 
-Coding examples are available in the **doc/examples** directory.
+## Publish
+
+Publish scripts do not embed a registry address. Set these environment variables before uploading a package or image:
+
+- `OCTANS_GITEA_URL`
+- `OCTANS_GITEA_HOST`
+- `OCTANS_FFMPEG_HARBOR_REPOSITORY`
+
+Gitea Actions reads the same addresses from repository variables, and reads registry credentials from repository secrets:
+
+- `OCTANS_FFMPEG_RUNNER`
+- `OCTANS_FFMPEG_CI_CACHE_ROOT`
+- `OCTANS_GITEA_URL`
+- `OCTANS_GITEA_HOST`
+- `OCTANS_FFMPEG_HARBOR_REGISTRY`
+- `OCTANS_FFMPEG_HARBOR_REPOSITORY`
+- `OCTANS_GITEA_REGISTRY_USERNAME`
+- `OCTANS_GITEA_REGISTRY_TOKEN`
+- `OCTANS_HARBOR_REGISTRY_USERNAME`
+- `OCTANS_HARBOR_REGISTRY_TOKEN`
 
 ## License
 
-FFmpeg codebase is mainly LGPL-licensed with optional components licensed under
-GPL. Please refer to the LICENSE file for detailed information.
-
-## Contributing
-
-Patches should be submitted to the ffmpeg-devel mailing list using
-`git format-patch` or `git send-email`. Github pull requests should be
-avoided because they are not part of our review process and will be ignored.
+FFmpeg's own license terms are in `LICENSE.md` and the `COPYING.*` files. Enabling GPL components and linking libx264/libx265 makes this build GPLv3. The source required to rebuild the distributed binaries is this repository, including `debian/patches` and `scripts/build-octans-full-linux.sh`.

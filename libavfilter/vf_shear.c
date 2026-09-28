@@ -130,8 +130,8 @@ static int filter_slice_nn##name(AVFilterContext *ctx, void *arg, int jobnr, \
         const int height = s->planeheight[p];                                \
         const int wx = vsub * shx * height * 0.5f / hsub;                    \
         const int wy = hsub * shy * width  * 0.5f / vsub;                    \
-        const int slice_start = (height * jobnr) / nb_jobs;                  \
-        const int slice_end = (height * (jobnr+1)) / nb_jobs;                \
+        const int slice_start = ff_slice_pos(height, jobnr, nb_jobs);        \
+        const int slice_end = ff_slice_pos(height, jobnr + 1, nb_jobs);      \
         const int src_linesize = in->linesize[p] / sizeof(type);             \
         const int dst_linesize = out->linesize[p] / sizeof(type);            \
         const type *src = (const type *)in->data[p];                         \
@@ -177,8 +177,8 @@ static int filter_slice_bl##name(AVFilterContext *ctx, void *arg, int jobnr, \
         const int height = s->planeheight[p];                                \
         const float wx = vsub * shx * height * 0.5f / hsub;                  \
         const float wy = hsub * shy * width  * 0.5f / vsub;                  \
-        const int slice_start = (height * jobnr) / nb_jobs;                  \
-        const int slice_end = (height * (jobnr+1)) / nb_jobs;                \
+        const int slice_start = ff_slice_pos(height, jobnr, nb_jobs);        \
+        const int slice_end = ff_slice_pos(height, jobnr + 1, nb_jobs);      \
         const int src_linesize = in->linesize[p] / sizeof(type);             \
         const int dst_linesize = out->linesize[p] / sizeof(type);            \
         const type *src = (const type *)in->data[p];                         \
@@ -250,6 +250,7 @@ static int config_output(AVFilterLink *outlink)
     AVFilterContext *ctx = outlink->src;
     ShearContext *s = ctx->priv;
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(outlink->format);
+    int ret;
 
     s->nb_planes = av_pix_fmt_count_planes(outlink->format);
     s->depth = desc->comp[0].depth;
@@ -260,7 +261,11 @@ static int config_output(AVFilterLink *outlink)
     s->planeheight[1] = s->planeheight[2] = AV_CEIL_RSHIFT(ctx->inputs[0]->h, desc->log2_chroma_h);
     s->planeheight[0] = s->planeheight[3] = ctx->inputs[0]->h;
 
-    ff_draw_init2(&s->draw, outlink->format, outlink->colorspace, outlink->color_range, 0);
+    ret = ff_draw_init_from_link(&s->draw, outlink, 0);
+    if (ret < 0) {
+        av_log(ctx, AV_LOG_ERROR, "Failed to initialize FFDrawContext\n");
+        return ret;
+    }
     ff_draw_color(&s->draw, &s->color, s->fillcolor);
 
     s->filter_slice[0] = s->depth <= 8 ? filter_slice_nn8 : filter_slice_nn16;
@@ -307,15 +312,15 @@ static const AVFilterPad outputs[] = {
     },
 };
 
-const AVFilter ff_vf_shear = {
-    .name            = "shear",
-    .description     = NULL_IF_CONFIG_SMALL("Shear transform the input image."),
+const FFFilter ff_vf_shear = {
+    .p.name          = "shear",
+    .p.description   = NULL_IF_CONFIG_SMALL("Shear transform the input image."),
+    .p.priv_class    = &shear_class,
+    .p.flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
     .priv_size       = sizeof(ShearContext),
     .init            = init,
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(outputs),
     FILTER_PIXFMTS_ARRAY(pix_fmts),
-    .priv_class      = &shear_class,
-    .flags           = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
     .process_command = process_command,
 };

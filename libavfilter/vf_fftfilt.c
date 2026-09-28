@@ -133,8 +133,8 @@ static int rdft_horizontal8(AVFilterContext *ctx, void *arg, int jobnr, int nb_j
     for (int plane = 0; plane < s->nb_planes; plane++) {
         const int w = s->planewidth[plane];
         const int h = s->planeheight[plane];
-        const int slice_start = (h * jobnr) / nb_jobs;
-        const int slice_end = (h * (jobnr+1)) / nb_jobs;
+        const int slice_start = ff_slice_pos(h, jobnr, nb_jobs);
+        const int slice_end = ff_slice_pos(h, jobnr + 1, nb_jobs);
 
         for (int i = slice_start; i < slice_end; i++) {
             const uint8_t *src = in->data[plane] + i * in->linesize[plane];
@@ -164,8 +164,8 @@ static int rdft_horizontal16(AVFilterContext *ctx, void *arg, int jobnr, int nb_
     for (int plane = 0; plane < s->nb_planes; plane++) {
         const int w = s->planewidth[plane];
         const int h = s->planeheight[plane];
-        const int slice_start = (h * jobnr) / nb_jobs;
-        const int slice_end = (h * (jobnr+1)) / nb_jobs;
+        const int slice_start = ff_slice_pos(h, jobnr, nb_jobs);
+        const int slice_end = ff_slice_pos(h, jobnr + 1, nb_jobs);
 
         for (int i = slice_start; i < slice_end; i++) {
             const uint16_t *src = (const uint16_t *)(in->data[plane] + i * in->linesize[plane]);
@@ -195,8 +195,8 @@ static int irdft_horizontal8(AVFilterContext *ctx, void *arg, int jobnr, int nb_
     for (int plane = 0; plane < s->nb_planes; plane++) {
         const int w = s->planewidth[plane];
         const int h = s->planeheight[plane];
-        const int slice_start = (h * jobnr) / nb_jobs;
-        const int slice_end = (h * (jobnr+1)) / nb_jobs;
+        const int slice_start = ff_slice_pos(h, jobnr, nb_jobs);
+        const int slice_end = ff_slice_pos(h, jobnr + 1, nb_jobs);
 
         for (int i = slice_start; i < slice_end; i++)
             s->ihtx_fn(s->ihrdft[jobnr][plane],
@@ -226,8 +226,8 @@ static int irdft_horizontal16(AVFilterContext *ctx, void *arg, int jobnr, int nb
         int max = (1 << s->depth) - 1;
         const int w = s->planewidth[plane];
         const int h = s->planeheight[plane];
-        const int slice_start = (h * jobnr) / nb_jobs;
-        const int slice_end = (h * (jobnr+1)) / nb_jobs;
+        const int slice_start = ff_slice_pos(h, jobnr, nb_jobs);
+        const int slice_end = ff_slice_pos(h, jobnr + 1, nb_jobs);
 
         for (int i = slice_start; i < slice_end; i++)
             s->ihtx_fn(s->ihrdft[jobnr][plane],
@@ -396,8 +396,8 @@ static int multiply_data(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs
 
     for (int plane = 0; plane < s->nb_planes; plane++) {
         const int height = s->rdft_hlen[plane];
-        const int slice_start = (height * jobnr) / nb_jobs;
-        const int slice_end = (height * (jobnr+1)) / nb_jobs;
+        const int slice_start = ff_slice_pos(height, jobnr, nb_jobs);
+        const int slice_end = ff_slice_pos(height, jobnr + 1, nb_jobs);
         /*Change user defined parameters*/
         for (int i = slice_start; i < slice_end; i++) {
             const double *weight = s->weight[plane] + i * s->rdft_vlen[plane];
@@ -420,8 +420,8 @@ static int copy_vertical(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs
         const int vlen = s->rdft_vlen[plane];
         const int hstride = s->rdft_hstride[plane];
         const int vstride = s->rdft_vstride[plane];
-        const int slice_start = (hlen * jobnr) / nb_jobs;
-        const int slice_end = (hlen * (jobnr+1)) / nb_jobs;
+        const int slice_start = ff_slice_pos(hlen, jobnr, nb_jobs);
+        const int slice_end = ff_slice_pos(hlen, jobnr + 1, nb_jobs);
         const int h = s->planeheight[plane];
         float *hdata = s->rdft_hdata_out[plane];
         float *vdata = s->rdft_vdata_in[plane];
@@ -442,8 +442,8 @@ static int rdft_vertical(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs
 
     for (int plane = 0; plane < s->nb_planes; plane++) {
         const int height = s->rdft_hlen[plane];
-        const int slice_start = (height * jobnr) / nb_jobs;
-        const int slice_end = (height * (jobnr+1)) / nb_jobs;
+        const int slice_start = ff_slice_pos(height, jobnr, nb_jobs);
+        const int slice_end = ff_slice_pos(height, jobnr + 1, nb_jobs);
 
         for (int i = slice_start; i < slice_end; i++)
             s->vtx_fn(s->vrdft[jobnr][plane],
@@ -461,8 +461,8 @@ static int irdft_vertical(AVFilterContext *ctx, void *arg, int jobnr, int nb_job
 
     for (int plane = 0; plane < s->nb_planes; plane++) {
         const int height = s->rdft_hlen[plane];
-        const int slice_start = (height * jobnr) / nb_jobs;
-        const int slice_end = (height * (jobnr+1)) / nb_jobs;
+        const int slice_start = ff_slice_pos(height, jobnr, nb_jobs);
+        const int slice_end = ff_slice_pos(height, jobnr + 1, nb_jobs);
 
         for (int i = slice_start; i < slice_end; i++)
             s->ivtx_fn(s->ivrdft[jobnr][plane],
@@ -482,8 +482,8 @@ static int copy_horizontal(AVFilterContext *ctx, void *arg, int jobnr, int nb_jo
         const int hlen = s->rdft_hlen[plane];
         const int hstride = s->rdft_hstride[plane];
         const int vstride = s->rdft_vstride[plane];
-        const int slice_start = (hlen * jobnr) / nb_jobs;
-        const int slice_end = (hlen * (jobnr+1)) / nb_jobs;
+        const int slice_start = ff_slice_pos(hlen, jobnr, nb_jobs);
+        const int slice_end = ff_slice_pos(hlen, jobnr + 1, nb_jobs);
         const int h = s->planeheight[plane];
         float *hdata = s->rdft_hdata_in[plane];
         float *vdata = s->rdft_vdata_in[plane];
@@ -592,15 +592,15 @@ static const AVFilterPad fftfilt_inputs[] = {
     },
 };
 
-const AVFilter ff_vf_fftfilt = {
-    .name            = "fftfilt",
-    .description     = NULL_IF_CONFIG_SMALL("Apply arbitrary expressions to pixels in frequency domain."),
+const FFFilter ff_vf_fftfilt = {
+    .p.name          = "fftfilt",
+    .p.description   = NULL_IF_CONFIG_SMALL("Apply arbitrary expressions to pixels in frequency domain."),
+    .p.priv_class    = &fftfilt_class,
+    .p.flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
     .priv_size       = sizeof(FFTFILTContext),
-    .priv_class      = &fftfilt_class,
     FILTER_INPUTS(fftfilt_inputs),
     FILTER_OUTPUTS(ff_video_default_filterpad),
     FILTER_PIXFMTS_ARRAY(pixel_fmts_fftfilt),
     .init            = initialize,
     .uninit          = uninit,
-    .flags           = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
 };

@@ -802,8 +802,8 @@ static int morpho_slice(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
     for (int p = 0; p < s->nb_planes; p++) {
         const int width = s->planewidth[p];
         const int height = s->planeheight[p];
-        const int y0 = (height *  jobnr   ) / nb_jobs;
-        const int y1 = (height * (jobnr+1)) / nb_jobs;
+        const int y0 = ff_slice_pos(height, jobnr, nb_jobs);
+        const int y1 = ff_slice_pos(height, jobnr + 1, nb_jobs);
         const int depth = s->depth;
 
         if (ctx->is_disabled || !(s->planes & (1 << p))) {
@@ -857,8 +857,8 @@ static int morpho_sliceX(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs
 
     for (int p = 0; p < s->nb_planes; p++) {
         const int height = s->planeheight[p];
-        const int y0 = (height *  jobnr   ) / nb_jobs;
-        const int y1 = (height * (jobnr+1)) / nb_jobs;
+        const int y0 = ff_slice_pos(height, jobnr, nb_jobs);
+        const int y1 = ff_slice_pos(height, jobnr + 1, nb_jobs);
 
         if (ctx->is_disabled || !(s->planes & (1 << p))) {
 copy:
@@ -1076,18 +1076,18 @@ static const AVFilterPad morpho_outputs[] = {
     },
 };
 
-const AVFilter ff_vf_morpho = {
-    .name            = "morpho",
-    .description     = NULL_IF_CONFIG_SMALL("Apply Morphological filter."),
+const FFFilter ff_vf_morpho = {
+    .p.name          = "morpho",
+    .p.description   = NULL_IF_CONFIG_SMALL("Apply Morphological filter."),
+    .p.priv_class    = &morpho_class,
+    .p.flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
+                       AVFILTER_FLAG_SLICE_THREADS,
     .preinit         = morpho_framesync_preinit,
     .priv_size       = sizeof(MorphoContext),
-    .priv_class      = &morpho_class,
     .activate        = activate,
     .uninit          = uninit,
     FILTER_INPUTS(morpho_inputs),
     FILTER_OUTPUTS(morpho_outputs),
     FILTER_PIXFMTS_ARRAY(pix_fmts),
-    .flags           = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
-                       AVFILTER_FLAG_SLICE_THREADS,
     .process_command = ff_filter_process_command,
 };

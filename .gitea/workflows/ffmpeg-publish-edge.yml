@@ -1,0 +1,274 @@
+name: ffmpeg-publish-edge
+
+on:
+  workflow_dispatch:
+    inputs:
+      recovery:
+        description: "仅在恢复同一次 edge 快照失败发布时填 true"
+        required: false
+        default: "false"
+
+env:
+  OCTANS_FFMPEG_CI_CACHE_ROOT: ${{ vars.OCTANS_FFMPEG_CI_CACHE_ROOT }}
+  OCTANS_GITEA_URL: ${{ vars.OCTANS_GITEA_URL }}
+  OCTANS_GITEA_HOST: ${{ vars.OCTANS_GITEA_HOST }}
+  OCTANS_GITEA_PACKAGE_OWNER: octans
+  OCTANS_GITEA_DEBIAN_DISTRIBUTION: resolute
+  OCTANS_GITEA_DEBIAN_COMPONENT: edge
+  OCTANS_FFMPEG_HARBOR_REGISTRY: ${{ vars.OCTANS_FFMPEG_HARBOR_REGISTRY }}
+  OCTANS_FFMPEG_HARBOR_REPOSITORY: ${{ vars.OCTANS_FFMPEG_HARBOR_REPOSITORY }}
+
+jobs:
+  edge:
+    runs-on: ${{ vars.OCTANS_FFMPEG_RUNNER }}
+    timeout-minutes: 480
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Plan edge tags
+        env:
+          OCTANS_FFMPEG_EDGE_RECOVERY_INPUT: ${{ github.event.inputs.recovery }}
+        run: |
+          set -euo pipefail
+
+          ref_name="${GITHUB_REF_NAME:-}"
+          if [[ -z "${ref_name}" && "${GITHUB_REF:-}" == refs/heads/* ]]; then
+            ref_name="${GITHUB_REF#refs/heads/}"
+          fi
+          if [[ -z "${ref_name}" ]]; then
+            ref_name="$(git rev-parse --abbrev-ref HEAD)"
+          fi
+
+          revision="$(git rev-parse HEAD)"
+          if [[ "${ref_name}" != "main" ]]; then
+            if git rev-parse --verify origin/main >/dev/null 2>&1 \
+              && [[ "$(git rev-parse origin/main)" == "${revision}" ]]; then
+              ref_name="main"
+            else
+              printf 'FFmpeg edge publish must run from main, got: %s\n' "${ref_name}" >&2
+              exit 1
+            fi
+          fi
+
+          short_sha="${GITHUB_SHA:-${revision}}"
+          short_sha="${short_sha:0:8}"
+          ci_timestamp="$(date -u +%Y%m%d%H%M%S)"
+          ci_id="edge-${ci_timestamp}-${short_sha}"
+
+          recovery="${OCTANS_FFMPEG_EDGE_RECOVERY_INPUT:-false}"
+          if [[ "${recovery}" != "true" && "${recovery}" != "false" ]]; then
+            printf 'invalid recovery input: %s\n' "${recovery}" >&2
+            printf 'expected: true or false\n' >&2
+            exit 1
+          fi
+
+          ffmpeg_version="8.1.2"
+          jellyfin_revision="4"
+          platform_tag="resolute-amd64"
+          build_root="${OCTANS_FFMPEG_CI_CACHE_ROOT}/${ci_id}"
+          build_version="octans-ffmpeg-full-linux-${ci_id}-ubuntu2604-system-runtime"
+          build_image="octans-ffmpeg-full-linux-build:ci-${ci_id}"
+          deb_version="${ffmpeg_version}+jellyfin${jellyfin_revision}+octans.edge.${ci_timestamp}.${short_sha}"
+          image_version="${ffmpeg_version}-jellyfin${jellyfin_revision}-octans-edge-${ci_timestamp}-${short_sha}-${platform_tag}"
+          local_image="octans-ffmpeg-full:${image_version}"
+          deb_path="${build_root}/dist/octans-ffmpeg-full_${deb_version}_amd64.deb"
+
+          {
+            echo "OCTANS_FFMPEG_BUILD_ROOT=${build_root}"
+            echo "OCTANS_FFMPEG_BUILD_VERSION=${build_version}"
+            echo "OCTANS_FFMPEG_BUILD_IMAGE=${build_image}"
+            echo "OCTANS_FFMPEG_DEB_VERSION=${deb_version}"
+            echo "OCTANS_FFMPEG_IMAGE_VERSION=${image_version}"
+            echo "OCTANS_FFMPEG_LOCAL_IMAGE=${local_image}"
+            echo "OCTANS_FFMPEG_DEB_PATH=${deb_path}"
+            echo "FIXED_TAG=${image_version}"
+            echo "MOVING_TAG=edge"
+            echo "OCTANS_FFMPEG_RELEASE_RECOVERY=${recovery}"
+          } >> "${GITHUB_ENV}"
+
+          mkdir -p "${OCTANS_FFMPEG_CI_CACHE_ROOT}"
+          find "${OCTANS_FFMPEG_CI_CACHE_ROOT}" \
+            -mindepth 1 \
+            -maxdepth 1 \
+            -type d \
+            -mtime +7 \
+            -exec rm -rf {} +
+
+          printf 'FFmpeg edge publish plan:\n'
+          printf '  revision: %s\n' "${revision}"
+          printf '  build_root: %s\n' "${build_root}"
+          printf '  deb_version: %s\n' "${deb_version}"
+          printf '  debian_component: %s\n' "${OCTANS_GITEA_DEBIAN_COMPONENT}"
+          printf '  recovery: %s\n' "${recovery}"
+          printf '  image_version: %s\n' "${image_version}"
+          printf '  local_image: %s\n' "${local_image}"
+          printf '  target: %s:%s\n' "${OCTANS_FFMPEG_HARBOR_REPOSITORY}" "${image_version}"
+          printf '  target: %s:%s\n' "${OCTANS_FFMPEG_HARBOR_REPOSITORY}" "edge"
+
+      - name: Validate registry secrets
+        env:
+          OCTANS_GITEA_REGISTRY_USERNAME: ${{ secrets.OCTANS_GITEA_REGISTRY_USERNAME }}
+          OCTANS_GITEA_REGISTRY_TOKEN: ${{ secrets.OCTANS_GITEA_REGISTRY_TOKEN }}
+          OCTANS_HARBOR_REGISTRY_USERNAME: ${{ secrets.OCTANS_HARBOR_REGISTRY_USERNAME }}
+          OCTANS_HARBOR_REGISTRY_TOKEN: ${{ secrets.OCTANS_HARBOR_REGISTRY_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          required=(
+            OCTANS_GITEA_REGISTRY_USERNAME
+            OCTANS_GITEA_REGISTRY_TOKEN
+            OCTANS_HARBOR_REGISTRY_USERNAME
+            OCTANS_HARBOR_REGISTRY_TOKEN
+          )
+
+          for name in "${required[@]}"; do
+            if [[ -z "${!name:-}" ]]; then
+              printf 'missing required secret: %s\n' "${name}" >&2
+              exit 1
+            fi
+          done
+
+          printf 'registry secrets are present\n'
+
+      - name: Login Harbor registry
+        env:
+          OCTANS_HARBOR_REGISTRY_USERNAME: ${{ secrets.OCTANS_HARBOR_REGISTRY_USERNAME }}
+          OCTANS_HARBOR_REGISTRY_TOKEN: ${{ secrets.OCTANS_HARBOR_REGISTRY_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          printf '%s' "${OCTANS_HARBOR_REGISTRY_TOKEN}" \
+            | docker login "${OCTANS_FFMPEG_HARBOR_REGISTRY}" \
+              --username "${OCTANS_HARBOR_REGISTRY_USERNAME}" \
+              --password-stdin
+
+      - name: Check immutable edge tag is new
+        run: |
+          set -euo pipefail
+          . scripts/ci-retry-helpers.sh
+
+          if [[ "${OCTANS_FFMPEG_RELEASE_RECOVERY}" == "true" ]]; then
+            printf 'recovery=true, immutable edge tag state will be checked by publish script\n'
+            exit 0
+          fi
+
+          ensure_absent() {
+            local ref="$1"
+            local status
+
+            set +e
+            octans_ci_imagetools_ref_exists "${ref}"
+            status="$?"
+            set -e
+
+            case "${status}" in
+              0)
+                printf 'ref already exists, refusing to overwrite immutable tag: %s\n' "${ref}" >&2
+                exit 1
+                ;;
+              1)
+                return 0
+                ;;
+              *)
+                printf 'failed to verify immutable tag absence: %s\n' "${ref}" >&2
+                exit 1
+                ;;
+            esac
+          }
+
+          ensure_absent "${OCTANS_FFMPEG_HARBOR_REPOSITORY}:${FIXED_TAG}"
+
+      - name: Build Octans FFmpeg runtime
+        run: |
+          set -euo pipefail
+          export OCTANS_FFMPEG_VERSION="${OCTANS_FFMPEG_BUILD_VERSION}"
+          scripts/build-octans-full-linux.sh
+
+      - name: Verify staged runtime
+        run: |
+          set -euo pipefail
+          scripts/verify-full-linux.sh \
+            "${OCTANS_FFMPEG_BUILD_ROOT}/stage/current/opt/octans-ffmpeg"
+
+      - name: Package Debian artifact
+        run: |
+          set -euo pipefail
+          scripts/package-deb.sh \
+            --stage "${OCTANS_FFMPEG_BUILD_ROOT}/stage/current/opt/octans-ffmpeg" \
+            --version "${OCTANS_FFMPEG_DEB_VERSION}" \
+            --output-dir "${OCTANS_FFMPEG_BUILD_ROOT}/dist"
+
+          test -f "${OCTANS_FFMPEG_DEB_PATH}"
+          sha256sum "${OCTANS_FFMPEG_DEB_PATH}"
+
+      - name: Verify Debian install
+        run: |
+          set -euo pipefail
+          scripts/verify-deb-install.sh "${OCTANS_FFMPEG_DEB_PATH}"
+
+      - name: Build runtime image
+        run: |
+          set -euo pipefail
+          scripts/build-runtime-image.sh \
+            --deb "${OCTANS_FFMPEG_DEB_PATH}" \
+            --version "${OCTANS_FFMPEG_IMAGE_VERSION}" \
+            --tag "${OCTANS_FFMPEG_LOCAL_IMAGE}" \
+            --no-registry-tags
+
+      - name: Verify runtime image
+        run: |
+          set -euo pipefail
+          scripts/verify-runtime-image.sh "${OCTANS_FFMPEG_LOCAL_IMAGE}"
+          scripts/verify-runtime-image-gpu.sh "${OCTANS_FFMPEG_LOCAL_IMAGE}"
+
+      - name: Publish edge release
+        env:
+          OCTANS_GITEA_PACKAGE_USERNAME: ${{ secrets.OCTANS_GITEA_REGISTRY_USERNAME }}
+          OCTANS_GITEA_PACKAGE_TOKEN: ${{ secrets.OCTANS_GITEA_REGISTRY_TOKEN }}
+        run: |
+          set -euo pipefail
+          scripts/publish-ffmpeg-runtime-release.sh \
+            --deb "${OCTANS_FFMPEG_DEB_PATH}" \
+            --local-image "${OCTANS_FFMPEG_LOCAL_IMAGE}" \
+            --fixed-tag "${FIXED_TAG}" \
+            --moving-tag "${MOVING_TAG}" \
+            --recovery "${OCTANS_FFMPEG_RELEASE_RECOVERY}"
+
+      - name: Report published artifacts
+        run: |
+          set -euo pipefail
+
+          printf 'FFmpeg edge publish completed:\n'
+          printf '  deb: %s\n' "${OCTANS_FFMPEG_DEB_PATH}"
+          printf '  deb_sha256: '
+          sha256sum "${OCTANS_FFMPEG_DEB_PATH}" | awk '{print $1}'
+          printf '  debian_component: %s\n' "${OCTANS_GITEA_DEBIAN_COMPONENT}"
+          printf '  image: %s\n' "${OCTANS_FFMPEG_LOCAL_IMAGE}"
+          printf '  fixed_tag: %s\n' "${FIXED_TAG}"
+          printf '  moving_tag: %s\n' "${MOVING_TAG}"
+          printf '  docker_digest: %s\n' "${OCTANS_FFMPEG_PUBLISHED_DIGEST}"
+
+      - name: Cleanup local images and logout registries
+        if: always()
+        run: |
+          set -euo pipefail
+
+          for ref in \
+            "${OCTANS_FFMPEG_HARBOR_REPOSITORY}:${FIXED_TAG:-}" \
+            "${OCTANS_FFMPEG_HARBOR_REPOSITORY}:${MOVING_TAG:-}"; do
+            if [[ "${ref}" != *: ]]; then
+              docker image rm "${ref}" >/dev/null 2>&1 || true
+            fi
+          done
+
+          if [[ -n "${OCTANS_FFMPEG_LOCAL_IMAGE:-}" ]]; then
+            docker image rm "${OCTANS_FFMPEG_LOCAL_IMAGE}" >/dev/null 2>&1 || true
+          fi
+
+          if [[ -n "${OCTANS_FFMPEG_BUILD_IMAGE:-}" ]]; then
+            docker image rm "${OCTANS_FFMPEG_BUILD_IMAGE}" >/dev/null 2>&1 || true
+          fi
+
+          docker logout "${OCTANS_FFMPEG_HARBOR_REGISTRY}" >/dev/null 2>&1 || true

@@ -695,9 +695,9 @@ static int filter_slice(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
     const int height = s->planeheight[plane];
     const int block_pos_bottom = FFMAX(0, height - s->block_size);
     const int block_pos_right  = FFMAX(0, width - s->block_size);
-    const int slice_start = (((height + block_step - 1) / block_step) * jobnr / nb_jobs) * block_step;
+    const int slice_start = ff_slice_pos((height + block_step - 1) / block_step, jobnr, nb_jobs) * block_step;
     const int slice_end = (jobnr == nb_jobs - 1) ? block_pos_bottom + block_step :
-                          (((height + block_step - 1) / block_step) * (jobnr + 1) / nb_jobs) * block_step;
+                          ff_slice_pos((height + block_step - 1) / block_step, jobnr + 1, nb_jobs) * block_step;
 
     memset(sc->num, 0, width * height * sizeof(float));
     memset(sc->den, 0, width * height * sizeof(float));
@@ -1042,18 +1042,18 @@ static const AVFilterPad bm3d_outputs[] = {
     },
 };
 
-const AVFilter ff_vf_bm3d = {
-    .name          = "bm3d",
-    .description   = NULL_IF_CONFIG_SMALL("Block-Matching 3D denoiser."),
+const FFFilter ff_vf_bm3d = {
+    .p.name        = "bm3d",
+    .p.description = NULL_IF_CONFIG_SMALL("Block-Matching 3D denoiser."),
+    .p.inputs      = NULL,
+    .p.priv_class  = &bm3d_class,
+    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
+                     AVFILTER_FLAG_DYNAMIC_INPUTS |
+                     AVFILTER_FLAG_SLICE_THREADS,
     .priv_size     = sizeof(BM3DContext),
     .init          = init,
     .uninit        = uninit,
     .activate      = activate,
-    .inputs        = NULL,
     FILTER_OUTPUTS(bm3d_outputs),
     FILTER_PIXFMTS_ARRAY(pix_fmts),
-    .priv_class    = &bm3d_class,
-    .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
-                     AVFILTER_FLAG_DYNAMIC_INPUTS |
-                     AVFILTER_FLAG_SLICE_THREADS,
 };

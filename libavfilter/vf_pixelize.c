@@ -189,10 +189,10 @@ static int pixelize_slice(AVFilterContext *ctx, void *arg, int jobnr, int nb_job
         const int wh = s->planeheight[p];
         const int h = (s->planeheight[p] + s->block_h[p] - 1) / s->block_h[p];
         const int w = (s->planewidth[p] + s->block_w[p] - 1) / s->block_w[p];
-        const int wslice_start = (wh * jobnr) / nb_jobs;
-        const int wslice_end = (wh * (jobnr+1)) / nb_jobs;
-        const int slice_start = (h * jobnr) / nb_jobs;
-        const int slice_end = (h * (jobnr+1)) / nb_jobs;
+        const int wslice_start = ff_slice_pos(wh, jobnr, nb_jobs);
+        const int wslice_end = ff_slice_pos(wh, jobnr + 1, nb_jobs);
+        const int slice_start = ff_slice_pos(h, jobnr, nb_jobs);
+        const int slice_end = ff_slice_pos(h, jobnr + 1, nb_jobs);
         const ptrdiff_t out_linesize = out->linesize[p];
         const ptrdiff_t in_linesize = in->linesize[p];
         const uint8_t *src = in->data[p];
@@ -338,14 +338,14 @@ static const AVFilterPad pixelize_outputs[] = {
     },
 };
 
-const AVFilter ff_vf_pixelize = {
-    .name          = "pixelize",
-    .description   = NULL_IF_CONFIG_SMALL("Pixelize video."),
+const FFFilter ff_vf_pixelize = {
+    .p.name        = "pixelize",
+    .p.description = NULL_IF_CONFIG_SMALL("Pixelize video."),
+    .p.priv_class  = &pixelize_class,
+    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
     .priv_size     = sizeof(PixelizeContext),
-    .priv_class    = &pixelize_class,
     FILTER_INPUTS(pixelize_inputs),
     FILTER_OUTPUTS(pixelize_outputs),
     FILTER_PIXFMTS_ARRAY(pix_fmts),
-    .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
     .process_command = ff_filter_process_command,
 };

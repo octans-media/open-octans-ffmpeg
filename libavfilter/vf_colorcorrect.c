@@ -68,8 +68,8 @@ static int average_slice8(AVFilterContext *ctx, void *arg, int jobnr, int nb_job
     const float imax = s->imax;
     const int width = s->planewidth[1];
     const int height = s->planeheight[1];
-    const int slice_start = (height * jobnr) / nb_jobs;
-    const int slice_end = (height * (jobnr + 1)) / nb_jobs;
+    const int slice_start = ff_slice_pos(height, jobnr, nb_jobs);
+    const int slice_end = ff_slice_pos(height, jobnr + 1, nb_jobs);
     const ptrdiff_t ulinesize = frame->linesize[1];
     const ptrdiff_t vlinesize = frame->linesize[2];
     const uint8_t *uptr = (const uint8_t *)frame->data[1] + slice_start * ulinesize;
@@ -99,8 +99,8 @@ static int average_slice16(AVFilterContext *ctx, void *arg, int jobnr, int nb_jo
     const float imax = s->imax;
     const int width = s->planewidth[1];
     const int height = s->planeheight[1];
-    const int slice_start = (height * jobnr) / nb_jobs;
-    const int slice_end = (height * (jobnr + 1)) / nb_jobs;
+    const int slice_start = ff_slice_pos(height, jobnr, nb_jobs);
+    const int slice_end = ff_slice_pos(height, jobnr + 1, nb_jobs);
     const ptrdiff_t ulinesize = frame->linesize[1] / 2;
     const ptrdiff_t vlinesize = frame->linesize[2] / 2;
     const uint16_t *uptr = (const uint16_t *)frame->data[1] + slice_start * ulinesize;
@@ -130,8 +130,8 @@ static int minmax_slice8(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs
     const float imax = s->imax;
     const int width = s->planewidth[1];
     const int height = s->planeheight[1];
-    const int slice_start = (height * jobnr) / nb_jobs;
-    const int slice_end = (height * (jobnr + 1)) / nb_jobs;
+    const int slice_start = ff_slice_pos(height, jobnr, nb_jobs);
+    const int slice_end = ff_slice_pos(height, jobnr + 1, nb_jobs);
     const ptrdiff_t ulinesize = frame->linesize[1];
     const ptrdiff_t vlinesize = frame->linesize[2];
     const uint8_t *uptr = (const uint8_t *)frame->data[1] + slice_start * ulinesize;
@@ -166,8 +166,8 @@ static int minmax_slice16(AVFilterContext *ctx, void *arg, int jobnr, int nb_job
     const float imax = s->imax;
     const int width = s->planewidth[1];
     const int height = s->planeheight[1];
-    const int slice_start = (height * jobnr) / nb_jobs;
-    const int slice_end = (height * (jobnr + 1)) / nb_jobs;
+    const int slice_start = ff_slice_pos(height, jobnr, nb_jobs);
+    const int slice_end = ff_slice_pos(height, jobnr + 1, nb_jobs);
     const ptrdiff_t ulinesize = frame->linesize[1] / 2;
     const ptrdiff_t vlinesize = frame->linesize[2] / 2;
     const uint16_t *uptr = (const uint16_t *)frame->data[1] + slice_start * ulinesize;
@@ -322,8 +322,8 @@ static int colorcorrect_slice8(AVFilterContext *ctx, void *arg, int jobnr, int n
     const int chroma_h = s->chroma_h;
     const int width = s->planewidth[1];
     const int height = s->planeheight[1];
-    const int slice_start = (height * jobnr) / nb_jobs;
-    const int slice_end = (height * (jobnr + 1)) / nb_jobs;
+    const int slice_start = ff_slice_pos(height, jobnr, nb_jobs);
+    const int slice_end = ff_slice_pos(height, jobnr + 1, nb_jobs);
     const ptrdiff_t ylinesize = frame->linesize[0];
     const ptrdiff_t ulinesize = frame->linesize[1];
     const ptrdiff_t vlinesize = frame->linesize[2];
@@ -363,8 +363,8 @@ static int colorcorrect_slice16(AVFilterContext *ctx, void *arg, int jobnr, int 
     const int chroma_h = s->chroma_h;
     const int width = s->planewidth[1];
     const int height = s->planeheight[1];
-    const int slice_start = (height * jobnr) / nb_jobs;
-    const int slice_end = (height * (jobnr + 1)) / nb_jobs;
+    const int slice_start = ff_slice_pos(height, jobnr, nb_jobs);
+    const int slice_end = ff_slice_pos(height, jobnr + 1, nb_jobs);
     const ptrdiff_t ylinesize = frame->linesize[0] / 2;
     const ptrdiff_t ulinesize = frame->linesize[1] / 2;
     const ptrdiff_t vlinesize = frame->linesize[2] / 2;
@@ -531,15 +531,15 @@ static const AVOption colorcorrect_options[] = {
 
 AVFILTER_DEFINE_CLASS(colorcorrect);
 
-const AVFilter ff_vf_colorcorrect = {
-    .name          = "colorcorrect",
-    .description   = NULL_IF_CONFIG_SMALL("Adjust color white balance selectively for blacks and whites."),
+const FFFilter ff_vf_colorcorrect = {
+    .p.name        = "colorcorrect",
+    .p.description = NULL_IF_CONFIG_SMALL("Adjust color white balance selectively for blacks and whites."),
+    .p.priv_class  = &colorcorrect_class,
+    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
     .priv_size     = sizeof(ColorCorrectContext),
-    .priv_class    = &colorcorrect_class,
     .uninit        = uninit,
     FILTER_INPUTS(colorcorrect_inputs),
     FILTER_OUTPUTS(ff_video_default_filterpad),
     FILTER_PIXFMTS_ARRAY(pixel_fmts),
-    .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
     .process_command = ff_filter_process_command,
 };

@@ -48,8 +48,8 @@ static int do_backgroundkey_slice(AVFilterContext *avctx, void *arg, int jobnr, 
 {
     BackgroundkeyContext *s = avctx->priv;
     AVFrame *frame = arg;
-    const int slice_start = (frame->height * jobnr) / nb_jobs;
-    const int slice_end = (frame->height * (jobnr + 1)) / nb_jobs;
+    const int slice_start = ff_slice_pos(frame->height, jobnr, nb_jobs);
+    const int slice_end = ff_slice_pos(frame->height, jobnr + 1, nb_jobs);
     const int min_diff = (255 + 255 + 255) * s->similarity;
     const float blend = s->blend;
     const int hsub = s->hsub_log2;
@@ -91,8 +91,8 @@ static int do_backgroundkey16_slice(AVFilterContext *avctx, void *arg, int jobnr
 {
     BackgroundkeyContext *s = avctx->priv;
     AVFrame *frame = arg;
-    const int slice_start = (frame->height * jobnr) / nb_jobs;
-    const int slice_end = (frame->height * (jobnr + 1)) / nb_jobs;
+    const int slice_start = ff_slice_pos(frame->height, jobnr, nb_jobs);
+    const int slice_end = ff_slice_pos(frame->height, jobnr + 1, nb_jobs);
     const int hsub = s->hsub_log2;
     const int vsub = s->vsub_log2;
     const int max = s->max;
@@ -241,15 +241,15 @@ static const enum AVPixelFormat backgroundkey_fmts[] = {
 
 AVFILTER_DEFINE_CLASS(backgroundkey);
 
-const AVFilter ff_vf_backgroundkey = {
-    .name            = "backgroundkey",
-    .description     = NULL_IF_CONFIG_SMALL("Turns a static background into transparency."),
+const FFFilter ff_vf_backgroundkey = {
+    .p.name          = "backgroundkey",
+    .p.description   = NULL_IF_CONFIG_SMALL("Turns a static background into transparency."),
+    .p.priv_class    = &backgroundkey_class,
+    .p.flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
     .priv_size       = sizeof(BackgroundkeyContext),
-    .priv_class      = &backgroundkey_class,
     .uninit          = uninit,
     FILTER_INPUTS(backgroundkey_inputs),
     FILTER_OUTPUTS(backgroundkey_outputs),
     FILTER_PIXFMTS_ARRAY(backgroundkey_fmts),
-    .flags           = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
     .process_command = ff_filter_process_command,
 };

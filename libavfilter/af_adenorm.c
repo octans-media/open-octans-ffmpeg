@@ -188,8 +188,8 @@ static int filter_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_jo
     ThreadData *td = arg;
     AVFrame *out = td->out;
     AVFrame *in = td->in;
-    const int start = (in->ch_layout.nb_channels * jobnr) / nb_jobs;
-    const int end = (in->ch_layout.nb_channels * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(in->ch_layout.nb_channels, jobnr, nb_jobs);
+    const int end = ff_slice_pos(in->ch_layout.nb_channels, jobnr + 1, nb_jobs);
 
     for (int ch = start; ch < end; ch++) {
         s->filter[s->type](ctx, out->extended_data[ch],
@@ -262,15 +262,15 @@ static const AVOption adenorm_options[] = {
 
 AVFILTER_DEFINE_CLASS(adenorm);
 
-const AVFilter ff_af_adenorm = {
-    .name            = "adenorm",
-    .description     = NULL_IF_CONFIG_SMALL("Remedy denormals by adding extremely low-level noise."),
+const FFFilter ff_af_adenorm = {
+    .p.name          = "adenorm",
+    .p.description   = NULL_IF_CONFIG_SMALL("Remedy denormals by adding extremely low-level noise."),
+    .p.priv_class    = &adenorm_class,
+    .p.flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC |
+                       AVFILTER_FLAG_SLICE_THREADS,
     .priv_size       = sizeof(ADenormContext),
     FILTER_INPUTS(adenorm_inputs),
     FILTER_OUTPUTS(adenorm_outputs),
     FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_DBLP),
-    .priv_class      = &adenorm_class,
     .process_command = ff_filter_process_command,
-    .flags           = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC |
-                       AVFILTER_FLAG_SLICE_THREADS,
 };

@@ -222,30 +222,21 @@ static av_cold void uninit(AVFilterContext *ctx)
     av_freep(&s->fdsp);
 }
 
-static int query_formats(AVFilterContext *ctx)
+static int query_formats(const AVFilterContext *ctx,
+                         AVFilterFormatsConfig **cfg_in,
+                         AVFilterFormatsConfig **cfg_out)
 {
     AVFilterFormats *formats = NULL;
-    AVFilterChannelLayouts *layouts = NULL;
-    AVFilterLink *inlink = ctx->inputs[0];
-    AVFilterLink *outlink = ctx->outputs[0];
     static const enum AVSampleFormat sample_fmts[] = { AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_NONE };
     static const enum AVPixelFormat pix_fmts[] = { AV_PIX_FMT_YUV444P, AV_PIX_FMT_YUVJ444P, AV_PIX_FMT_YUVA444P, AV_PIX_FMT_NONE };
     int ret;
 
-    formats = ff_make_format_list(sample_fmts);
-    if ((ret = ff_formats_ref(formats, &inlink->outcfg.formats)) < 0)
+    formats = ff_make_sample_format_list(sample_fmts);
+    if ((ret = ff_formats_ref(formats, &cfg_in[0]->formats)) < 0)
         return ret;
 
-    layouts = ff_all_channel_counts();
-    if ((ret = ff_channel_layouts_ref(layouts, &inlink->outcfg.channel_layouts)) < 0)
-        return ret;
-
-    formats = ff_all_samplerates();
-    if ((ret = ff_formats_ref(formats, &inlink->outcfg.samplerates)) < 0)
-        return ret;
-
-    formats = ff_make_format_list(pix_fmts);
-    if ((ret = ff_formats_ref(formats, &outlink->incfg.formats)) < 0)
+    formats = ff_make_pixel_format_list(pix_fmts);
+    if ((ret = ff_formats_ref(formats, &cfg_out[0]->formats)) < 0)
         return ret;
 
     return 0;
@@ -455,8 +446,8 @@ static int draw(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
     const ptrdiff_t alinesize = s->outpicref->linesize[3];
     const float log_factor = 1.f/logf(s->logarithmic_basis);
     const int count = s->frequency_band_count;
-    const int start = (count * jobnr) / nb_jobs;
-    const int end = (count * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(count, jobnr, nb_jobs);
+    const int end = ff_slice_pos(count, jobnr + 1, nb_jobs);
     const int nb_channels = s->nb_channels;
     const int iscale = s->intensity_scale;
     const int ihop_index = s->ihop_index;
@@ -659,8 +650,8 @@ static int run_channel_cwt(AVFilterContext *ctx, void *arg, int jobnr, int nb_jo
     const float scale = 1.f / input_padding_size;
     const int ihop_size = s->ihop_size;
     const int count = s->frequency_band_count;
-    const int start = (count * jobnr) / nb_jobs;
-    const int end = (count * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(count, jobnr, nb_jobs);
+    const int end = ff_slice_pos(count, jobnr + 1, nb_jobs);
 
     for (int y = start; y < end; y++) {
         AVComplexFloat *chout = ((AVComplexFloat *)s->ch_out->extended_data[y]) + ch * ihop_size;
@@ -762,7 +753,7 @@ static int compute_kernel(AVFilterContext *ctx)
             }
         }
 
-        for (int n = b; n >= a; n--) {
+        for (int n = b - 1; n >= a; n--) {
             if (tkernel[n+range] != 0.f) {
                 if (tkernel[n+range] > FLT_MIN)
                     av_log(ctx, AV_LOG_DEBUG, "out of range kernel %g\n", tkernel[n+range]);
@@ -817,6 +808,7 @@ static int config_output(AVFilterLink *outlink)
     float maximum_frequency = fminf(s->maximum_frequency, limit_frequency);
     float minimum_frequency = s->minimum_frequency;
     float scale = 1.f, factor;
+    double nb_samples;
     int ret;
 
     if (minimum_frequency >= maximum_frequency) {
@@ -886,11 +878,11 @@ static int config_output(AVFilterLink *outlink)
     if (!s->frequency_band)
         return AVERROR(ENOMEM);
 
-    s->nb_consumed_samples = inlink->sample_rate *
-                             frequency_band(s->frequency_band,
-                                            s->frequency_band_count, maximum_frequency - minimum_frequency,
-                                            minimum_frequency, s->frequency_scale, s->deviation);
-    s->nb_consumed_samples = FFMIN(s->nb_consumed_samples, 65536);
+    nb_samples = inlink->sample_rate *
+                 frequency_band(s->frequency_band,
+                                s->frequency_band_count, maximum_frequency - minimum_frequency,
+                                minimum_frequency, s->frequency_scale, s->deviation);
+    s->nb_consumed_samples = av_clip(av_clipd(nb_samples, 1, 65536), 1, 65536);
 
     s->nb_threads = FFMIN(s->frequency_band_count, ff_filter_get_nb_threads(ctx));
     s->nb_channels = inlink->ch_layout.nb_channels;
@@ -1021,7 +1013,7 @@ static int config_output(AVFilterLink *outlink)
         break;
     case DIRECTION_RL:
     case DIRECTION_DU:
-        s->pos = s->sono_size;
+        s->pos = FFMAX(s->sono_size - 1, 0);
         break;
     }
 
@@ -1069,7 +1061,7 @@ static int output_frame(AVFilterContext *ctx)
             for (int p = 0; p < nb_planes; p++) {
                 ptrdiff_t linesize = s->outpicref->linesize[p];
 
-                for (int y = 0; y < s->sono_size; y++) {
+                for (int y = 0; y < s->sono_size - 1; y++) {
                     uint8_t *dst = s->outpicref->data[p] + y * linesize;
 
                     memmove(dst, dst + linesize, s->w);
@@ -1096,7 +1088,7 @@ static int output_frame(AVFilterContext *ctx)
         case DIRECTION_RL:
             s->pos--;
             if (s->pos < 0) {
-                s->pos = s->sono_size;
+                s->pos = FFMAX(s->sono_size - 1, 0);
                 s->new_frame = 1;
             }
             break;
@@ -1110,7 +1102,7 @@ static int output_frame(AVFilterContext *ctx)
         case DIRECTION_DU:
             s->pos--;
             if (s->pos < 0) {
-                s->pos = s->sono_size;
+                s->pos = FFMAX(s->sono_size - 1, 0);
                 s->new_frame = 1;
             }
             break;
@@ -1124,7 +1116,7 @@ static int output_frame(AVFilterContext *ctx)
             break;
         case DIRECTION_RL:
         case DIRECTION_DU:
-            s->pos = s->sono_size;
+            s->pos = FFMAX(s->sono_size - 1, 0);
             break;
         }
         break;
@@ -1149,7 +1141,7 @@ static int output_frame(AVFilterContext *ctx)
         case DIRECTION_RL:
             for (int p = 0; p < nb_planes; p++) {
                 ptrdiff_t linesize = s->outpicref->linesize[p];
-                const int size = s->w - s->pos;
+                const int size = FFMIN(s->pos + 1, s->sono_size);
                 const int fill = p > 0 && p < 3 ? 128 : 0;
 
                 for (int y = 0; y < s->h; y++) {
@@ -1176,7 +1168,7 @@ static int output_frame(AVFilterContext *ctx)
                 ptrdiff_t linesize = s->outpicref->linesize[p];
                 const int fill = p > 0 && p < 3 ? 128 : 0;
 
-                for (int y = s->h - s->pos; y >= 0; y--) {
+                for (int y = FFMIN(s->pos, s->sono_size - 1); y >= 0; y--) {
                     uint8_t *dst = s->outpicref->data[p] + y * linesize;
 
                     memset(dst, fill, s->w);
@@ -1231,8 +1223,8 @@ static int run_channels_cwt_prepare(AVFilterContext *ctx, void *arg, int jobnr, 
 {
     ShowCWTContext *s = ctx->priv;
     const int count = s->nb_channels;
-    const int start = (count * jobnr) / nb_jobs;
-    const int end = (count * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(count, jobnr, nb_jobs);
+    const int end = ff_slice_pos(count, jobnr + 1, nb_jobs);
 
     for (int ch = start; ch < end; ch++)
         run_channel_cwt_prepare(ctx, arg, jobnr, ch);
@@ -1327,15 +1319,15 @@ static const AVFilterPad showcwt_outputs[] = {
     },
 };
 
-const AVFilter ff_avf_showcwt = {
-    .name          = "showcwt",
-    .description   = NULL_IF_CONFIG_SMALL("Convert input audio to a CWT (Continuous Wavelet Transform) spectrum video output."),
+const FFFilter ff_avf_showcwt = {
+    .p.name        = "showcwt",
+    .p.description = NULL_IF_CONFIG_SMALL("Convert input audio to a CWT (Continuous Wavelet Transform) spectrum video output."),
+    .p.priv_class  = &showcwt_class,
+    .p.flags       = AVFILTER_FLAG_SLICE_THREADS,
     .uninit        = uninit,
     .priv_size     = sizeof(ShowCWTContext),
     FILTER_INPUTS(ff_audio_default_filterpad),
     FILTER_OUTPUTS(showcwt_outputs),
-    FILTER_QUERY_FUNC(query_formats),
+    FILTER_QUERY_FUNC2(query_formats),
     .activate      = activate,
-    .priv_class    = &showcwt_class,
-    .flags         = AVFILTER_FLAG_SLICE_THREADS,
 };

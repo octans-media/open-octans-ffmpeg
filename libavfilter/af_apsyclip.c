@@ -532,8 +532,8 @@ static int psy_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 {
     AudioPsyClipContext *s = ctx->priv;
     AVFrame *out = arg;
-    const int start = (out->ch_layout.nb_channels * jobnr) / nb_jobs;
-    const int end = (out->ch_layout.nb_channels * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(out->ch_layout.nb_channels, jobnr, nb_jobs);
+    const int end = ff_slice_pos(out->ch_layout.nb_channels, jobnr + 1, nb_jobs);
 
     for (int ch = start; ch < end; ch++)
         psy_channel(ctx, s->in, out, ch);
@@ -637,17 +637,17 @@ static const AVFilterPad inputs[] = {
     },
 };
 
-const AVFilter ff_af_apsyclip = {
-    .name            = "apsyclip",
-    .description     = NULL_IF_CONFIG_SMALL("Audio Psychoacoustic Clipper."),
+const FFFilter ff_af_apsyclip = {
+    .p.name          = "apsyclip",
+    .p.description   = NULL_IF_CONFIG_SMALL("Audio Psychoacoustic Clipper."),
+    .p.priv_class    = &apsyclip_class,
+    .p.flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
+                       AVFILTER_FLAG_SLICE_THREADS,
     .priv_size       = sizeof(AudioPsyClipContext),
-    .priv_class      = &apsyclip_class,
     .uninit          = uninit,
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(ff_audio_default_filterpad),
     FILTER_SINGLE_SAMPLEFMT(AV_SAMPLE_FMT_FLTP),
-    .flags           = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
-                       AVFILTER_FLAG_SLICE_THREADS,
     .activate        = activate,
     .process_command = ff_filter_process_command,
 };

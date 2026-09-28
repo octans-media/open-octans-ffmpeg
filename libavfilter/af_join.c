@@ -469,7 +469,7 @@ static int try_push_frame(AVFilterContext *ctx)
         for (j = 0; j < nb_buffers; j++)
             if (s->buffers[j]->buffer == buf->buffer)
                 break;
-        if (j == i)
+        if (j == nb_buffers)
             s->buffers[nb_buffers++] = buf;
     }
 
@@ -595,17 +595,16 @@ static const AVFilterPad avfilter_af_join_outputs[] = {
     },
 };
 
-const AVFilter ff_af_join = {
-    .name           = "join",
-    .description    = NULL_IF_CONFIG_SMALL("Join multiple audio streams into "
+const FFFilter ff_af_join = {
+    .p.name         = "join",
+    .p.description  = NULL_IF_CONFIG_SMALL("Join multiple audio streams into "
                                            "multi-channel output."),
+    .p.priv_class   = &join_class,
+    .p.flags        = AVFILTER_FLAG_DYNAMIC_INPUTS,
     .priv_size      = sizeof(JoinContext),
-    .priv_class     = &join_class,
     .init           = join_init,
     .uninit         = join_uninit,
     .activate       = activate,
-    .inputs         = NULL,
     FILTER_OUTPUTS(avfilter_af_join_outputs),
     FILTER_QUERY_FUNC2(join_query_formats),
-    .flags          = AVFILTER_FLAG_DYNAMIC_INPUTS,
 };

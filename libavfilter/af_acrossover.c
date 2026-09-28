@@ -138,7 +138,7 @@ static int query_formats(const AVFilterContext *ctx,
     default:
         break;
     }
-    ret = ff_set_common_formats_from_list2(ctx, cfg_in, cfg_out, sample_fmts_list);
+    ret = ff_set_sample_formats_from_list2(ctx, cfg_in, cfg_out, sample_fmts_list);
     if (ret < 0)
         return ret;
 
@@ -397,8 +397,8 @@ static int filter_channels_## name(AVFilterContext *ctx, void *arg, int jobnr, i
     AudioCrossoverContext *s = ctx->priv;                                                   \
     AVFrame *in = arg;                                                           \
     AVFrame **frames = s->frames;                                                           \
-    const int start = (in->ch_layout.nb_channels * jobnr) / nb_jobs;                        \
-    const int end = (in->ch_layout.nb_channels * (jobnr+1)) / nb_jobs;                      \
+    const int start = ff_slice_pos(in->ch_layout.nb_channels, jobnr, nb_jobs);              \
+    const int end = ff_slice_pos(in->ch_layout.nb_channels, jobnr + 1, nb_jobs);            \
     const int nb_samples = in->nb_samples;                                                  \
     const int nb_outs = ctx->nb_outputs;                                                    \
     const int first_order = s->first_order;                                                 \
@@ -588,15 +588,7 @@ static int activate(AVFilterContext *ctx)
         return 0;
     }
 
-    for (int i = 0; i < ctx->nb_outputs; i++) {
-        if (ff_outlink_get_status(ctx->outputs[i]))
-            continue;
-
-        if (ff_outlink_frame_wanted(ctx->outputs[i])) {
-            ff_inlink_request_frame(inlink);
-            return 0;
-        }
-    }
+    FF_FILTER_FORWARD_WANTED_ANY(ctx, inlink);
 
     return FFERROR_NOT_READY;
 }
@@ -617,17 +609,17 @@ static const AVFilterPad inputs[] = {
     },
 };
 
-const AVFilter ff_af_acrossover = {
-    .name           = "acrossover",
-    .description    = NULL_IF_CONFIG_SMALL("Split audio into per-bands streams."),
+const FFFilter ff_af_acrossover = {
+    .p.name         = "acrossover",
+    .p.description  = NULL_IF_CONFIG_SMALL("Split audio into per-bands streams."),
+    .p.priv_class   = &acrossover_class,
+    .p.outputs      = NULL,
+    .p.flags        = AVFILTER_FLAG_DYNAMIC_OUTPUTS |
+                      AVFILTER_FLAG_SLICE_THREADS,
     .priv_size      = sizeof(AudioCrossoverContext),
-    .priv_class     = &acrossover_class,
     .init           = init,
     .activate       = activate,
     .uninit         = uninit,
     FILTER_INPUTS(inputs),
-    .outputs        = NULL,
     FILTER_QUERY_FUNC2(query_formats),
-    .flags          = AVFILTER_FLAG_DYNAMIC_OUTPUTS |
-                      AVFILTER_FLAG_SLICE_THREADS,
 };

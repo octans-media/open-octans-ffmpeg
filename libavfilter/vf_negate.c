@@ -277,8 +277,8 @@ static int filter_slice(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 
     for (int p = 0; p < s->nb_planes; p++) {
         const int h = s->height[p];
-        const int slice_start = (h * jobnr) / nb_jobs;
-        const int slice_end = (h * (jobnr+1)) / nb_jobs;
+        const int slice_start = ff_slice_pos(h, jobnr, nb_jobs);
+        const int slice_end = ff_slice_pos(h, jobnr + 1, nb_jobs);
 
         if (!((1 << p) & s->planes)) {
             if (out != in)
@@ -355,14 +355,14 @@ static const AVFilterPad inputs[] = {
     },
 };
 
-const AVFilter ff_vf_negate = {
-    .name          = "negate",
-    .description   = NULL_IF_CONFIG_SMALL("Negate input video."),
+const FFFilter ff_vf_negate = {
+    .p.name        = "negate",
+    .p.description = NULL_IF_CONFIG_SMALL("Negate input video."),
+    .p.priv_class  = &negate_class,
+    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
     .priv_size     = sizeof(NegateContext),
-    .priv_class    = &negate_class,
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(ff_video_default_filterpad),
     FILTER_PIXFMTS_ARRAY(pix_fmts),
-    .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
     .process_command = process_command,
 };

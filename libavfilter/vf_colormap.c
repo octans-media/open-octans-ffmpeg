@@ -309,8 +309,8 @@ static int colormap_slice(AVFilterContext *ctx, void *arg, int jobnr, int nb_job
     const int maps = s->nb_maps;
     const int width = out->width;
     const int height = out->height;
-    const int slice_start = (height * jobnr) / nb_jobs;
-    const int slice_end = (height * (jobnr + 1)) / nb_jobs;
+    const int slice_start = ff_slice_pos(height, jobnr, nb_jobs);
+    const int slice_end = ff_slice_pos(height, jobnr + 1, nb_jobs);
     const int sr_linesize = in->linesize[2] / 4;
     const int dr_linesize = out->linesize[2] / 4;
     const int sg_linesize = in->linesize[0] / 4;
@@ -561,17 +561,17 @@ static const AVFilterPad outputs[] = {
 
 AVFILTER_DEFINE_CLASS(colormap);
 
-const AVFilter ff_vf_colormap = {
-    .name          = "colormap",
-    .description   = NULL_IF_CONFIG_SMALL("Apply custom Color Maps to video stream."),
-    .priv_class    = &colormap_class,
+const FFFilter ff_vf_colormap = {
+    .p.name        = "colormap",
+    .p.description = NULL_IF_CONFIG_SMALL("Apply custom Color Maps to video stream."),
+    .p.priv_class  = &colormap_class,
+    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
+                     AVFILTER_FLAG_SLICE_THREADS,
     .priv_size     = sizeof(ColorMapContext),
     .activate      = activate,
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(outputs),
     FILTER_PIXFMTS(AV_PIX_FMT_GBRPF32, AV_PIX_FMT_GBRAPF32),
-    .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
-                     AVFILTER_FLAG_SLICE_THREADS,
     .process_command = ff_filter_process_command,
     .uninit        = uninit,
 };

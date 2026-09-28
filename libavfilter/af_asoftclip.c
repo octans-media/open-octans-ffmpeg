@@ -410,8 +410,8 @@ static int filter_channels(AVFilterContext *ctx, void *arg, int jobnr, int nb_jo
     AVFrame *in = td->in;
     const int channels = td->channels;
     const int nb_samples = td->nb_samples;
-    const int start = (channels * jobnr) / nb_jobs;
-    const int end = (channels * (jobnr+1)) / nb_jobs;
+    const int start = ff_slice_pos(channels, jobnr, nb_jobs);
+    const int end = ff_slice_pos(channels, jobnr + 1, nb_jobs);
 
     s->filter(s, (void **)out->extended_data, (const void **)in->extended_data,
               nb_samples, channels, start, end);
@@ -473,16 +473,16 @@ static const AVFilterPad inputs[] = {
     },
 };
 
-const AVFilter ff_af_asoftclip = {
-    .name           = "asoftclip",
-    .description    = NULL_IF_CONFIG_SMALL("Audio Soft Clipper."),
+const FFFilter ff_af_asoftclip = {
+    .p.name         = "asoftclip",
+    .p.description  = NULL_IF_CONFIG_SMALL("Audio Soft Clipper."),
+    .p.priv_class   = &asoftclip_class,
+    .p.flags        = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC |
+                      AVFILTER_FLAG_SLICE_THREADS,
     .priv_size      = sizeof(ASoftClipContext),
-    .priv_class     = &asoftclip_class,
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(ff_audio_default_filterpad),
     FILTER_SAMPLEFMTS(AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_DBLP),
     .uninit         = uninit,
     .process_command = ff_filter_process_command,
-    .flags          = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC |
-                      AVFILTER_FLAG_SLICE_THREADS,
 };

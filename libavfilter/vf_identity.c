@@ -103,8 +103,8 @@ int compute_images_msad(AVFilterContext *ctx, void *arg,
     for (int c = 0; c < td->nb_components; c++) {
         const int outw = td->planewidth[c];
         const int outh = td->planeheight[c];
-        const int slice_start = (outh * jobnr) / nb_jobs;
-        const int slice_end = (outh * (jobnr+1)) / nb_jobs;
+        const int slice_start = ff_slice_pos(outh, jobnr, nb_jobs);
+        const int slice_end = ff_slice_pos(outh, jobnr + 1, nb_jobs);
         const int ref_linesize = td->ref_linesize[c];
         const int main_linesize = td->main_linesize[c];
         const uint8_t *main_line = td->main_data[c] + main_linesize * slice_start;
@@ -131,8 +131,8 @@ int compute_images_identity(AVFilterContext *ctx, void *arg,
     for (int c = 0; c < td->nb_components; c++) {
         const int outw = td->planewidth[c];
         const int outh = td->planeheight[c];
-        const int slice_start = (outh * jobnr) / nb_jobs;
-        const int slice_end = (outh * (jobnr+1)) / nb_jobs;
+        const int slice_start = ff_slice_pos(outh, jobnr, nb_jobs);
+        const int slice_end = ff_slice_pos(outh, jobnr + 1, nb_jobs);
         const int ref_linesize = td->ref_linesize[c];
         const int main_linesize = td->main_linesize[c];
         const uint8_t *main_line = td->main_data[c] + main_linesize * slice_start;
@@ -304,7 +304,7 @@ static int config_input_ref(AVFilterLink *inlink)
     s->filter_slice = !s->is_msad ? compute_images_identity : compute_images_msad;
     s->filter_line = desc->comp[0].depth > 8 ? identity_line_16bit : identity_line_8bit;
 
-    s->sad = ff_scene_sad_get_fn(desc->comp[0].depth <= 8 ? 8 : 16);
+    s->sad = ff_scene_sad_get_fn(desc->comp[0].depth);
     if (!s->sad)
         return AVERROR(EINVAL);
 
@@ -403,21 +403,21 @@ static const AVOption options[] = {
 #define identity_options options
 FRAMESYNC_DEFINE_CLASS(identity, IdentityContext, fs);
 
-const AVFilter ff_vf_identity = {
-    .name          = "identity",
-    .description   = NULL_IF_CONFIG_SMALL("Calculate the Identity between two video streams."),
+const FFFilter ff_vf_identity = {
+    .p.name        = "identity",
+    .p.description = NULL_IF_CONFIG_SMALL("Calculate the Identity between two video streams."),
+    .p.priv_class  = &identity_class,
+    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
+                     AVFILTER_FLAG_SLICE_THREADS             |
+                     AVFILTER_FLAG_METADATA_ONLY,
     .preinit       = identity_framesync_preinit,
     .init          = init,
     .uninit        = uninit,
     .activate      = activate,
     .priv_size     = sizeof(IdentityContext),
-    .priv_class    = &identity_class,
     FILTER_INPUTS(identity_inputs),
     FILTER_OUTPUTS(identity_outputs),
     FILTER_PIXFMTS_ARRAY(pix_fmts),
-    .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
-                     AVFILTER_FLAG_SLICE_THREADS             |
-                     AVFILTER_FLAG_METADATA_ONLY,
 };
 
 #endif /* CONFIG_IDENTITY_FILTER */
@@ -427,21 +427,21 @@ const AVFilter ff_vf_identity = {
 #define msad_options options
 FRAMESYNC_DEFINE_CLASS(msad, IdentityContext, fs);
 
-const AVFilter ff_vf_msad = {
-    .name          = "msad",
-    .description   = NULL_IF_CONFIG_SMALL("Calculate the MSAD between two video streams."),
+const FFFilter ff_vf_msad = {
+    .p.name        = "msad",
+    .p.description = NULL_IF_CONFIG_SMALL("Calculate the MSAD between two video streams."),
+    .p.priv_class  = &msad_class,
+    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
+                     AVFILTER_FLAG_SLICE_THREADS             |
+                     AVFILTER_FLAG_METADATA_ONLY,
     .preinit       = msad_framesync_preinit,
     .init          = init,
     .uninit        = uninit,
     .activate      = activate,
     .priv_size     = sizeof(IdentityContext),
-    .priv_class    = &msad_class,
     FILTER_INPUTS(identity_inputs),
     FILTER_OUTPUTS(identity_outputs),
     FILTER_PIXFMTS_ARRAY(pix_fmts),
-    .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
-                     AVFILTER_FLAG_SLICE_THREADS             |
-                     AVFILTER_FLAG_METADATA_ONLY,
 };
 
 #endif /* CONFIG_MSAD_FILTER */

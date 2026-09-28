@@ -1,0 +1,159 @@
+name: ffmpeg-build-smoke
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".gitea/workflows/ffmpeg-build-smoke.yml"
+      - "debian/**"
+      - "docker/**"
+      - "scripts/build-octans-full-linux.sh"
+      - "scripts/build-runtime-image.sh"
+      - "scripts/package-deb.sh"
+      - "scripts/verify-deb-install.sh"
+      - "scripts/verify-full-linux.sh"
+      - "scripts/verify-runtime-image.sh"
+      - "scripts/verify-runtime-image-gpu.sh"
+      - "compat/**"
+      - "fftools/**"
+      - "libavcodec/**"
+      - "libavdevice/**"
+      - "libavfilter/**"
+      - "libavformat/**"
+      - "libavutil/**"
+      - "libswresample/**"
+      - "libswscale/**"
+      - "presets/**"
+      - "tools/**"
+      - "Makefile"
+      - "configure"
+      - "VERSION"
+
+env:
+  OCTANS_FFMPEG_CI_CACHE_ROOT: ${{ vars.OCTANS_FFMPEG_CI_CACHE_ROOT }}
+
+jobs:
+  build:
+    runs-on: ${{ vars.OCTANS_FFMPEG_RUNNER }}
+    timeout-minutes: 480
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Plan CI build
+        run: |
+          set -euo pipefail
+
+          revision="$(git rev-parse HEAD)"
+          short_sha="${GITHUB_SHA:-${revision}}"
+          short_sha="${short_sha:0:8}"
+          ci_timestamp="$(date -u +%Y%m%d%H%M%S)"
+          ci_id="${ci_timestamp}-${short_sha}"
+
+          build_root="${OCTANS_FFMPEG_CI_CACHE_ROOT}/${ci_id}"
+          build_version="octans-ffmpeg-full-linux-8.1.2-ci-${ci_id}-ubuntu2604-system-runtime"
+          build_image="octans-ffmpeg-full-linux-build:ci-${short_sha}"
+          deb_version="8.1.2+jellyfin4+octans.ci.${ci_timestamp}.${short_sha}"
+          image_version="8.1.2-jellyfin4-octans-ci-${ci_timestamp}-${short_sha}-resolute-amd64"
+          local_image="octans-ffmpeg-full:${image_version}"
+          deb_path="${build_root}/dist/octans-ffmpeg-full_${deb_version}_amd64.deb"
+
+          mkdir -p "${OCTANS_FFMPEG_CI_CACHE_ROOT}"
+          find "${OCTANS_FFMPEG_CI_CACHE_ROOT}" \
+            -mindepth 1 \
+            -maxdepth 1 \
+            -type d \
+            -mtime +7 \
+            -exec rm -rf {} +
+
+          {
+            echo "OCTANS_FFMPEG_BUILD_ROOT=${build_root}"
+            echo "OCTANS_FFMPEG_BUILD_VERSION=${build_version}"
+            echo "OCTANS_FFMPEG_BUILD_IMAGE=${build_image}"
+            echo "OCTANS_FFMPEG_DEB_VERSION=${deb_version}"
+            echo "OCTANS_FFMPEG_IMAGE_VERSION=${image_version}"
+            echo "OCTANS_FFMPEG_LOCAL_IMAGE=${local_image}"
+            echo "OCTANS_FFMPEG_DEB_PATH=${deb_path}"
+          } >> "${GITHUB_ENV}"
+
+          printf 'FFmpeg CI build plan:\n'
+          printf '  revision: %s\n' "${revision}"
+          printf '  build_root: %s\n' "${build_root}"
+          printf '  build_version: %s\n' "${build_version}"
+          printf '  deb_version: %s\n' "${deb_version}"
+          printf '  image_version: %s\n' "${image_version}"
+          printf '  local_image: %s\n' "${local_image}"
+
+      - name: Build Octans FFmpeg runtime
+        run: |
+          set -euo pipefail
+          export OCTANS_FFMPEG_VERSION="${OCTANS_FFMPEG_BUILD_VERSION}"
+          scripts/build-octans-full-linux.sh
+
+      - name: Verify staged runtime
+        run: |
+          set -euo pipefail
+          scripts/verify-full-linux.sh \
+            "${OCTANS_FFMPEG_BUILD_ROOT}/stage/current/opt/octans-ffmpeg"
+
+      - name: Package Debian artifact
+        run: |
+          set -euo pipefail
+          scripts/package-deb.sh \
+            --stage "${OCTANS_FFMPEG_BUILD_ROOT}/stage/current/opt/octans-ffmpeg" \
+            --version "${OCTANS_FFMPEG_DEB_VERSION}" \
+            --output-dir "${OCTANS_FFMPEG_BUILD_ROOT}/dist"
+
+          test -f "${OCTANS_FFMPEG_DEB_PATH}"
+          sha256sum "${OCTANS_FFMPEG_DEB_PATH}"
+
+      - name: Verify Debian install
+        run: |
+          set -euo pipefail
+          scripts/verify-deb-install.sh "${OCTANS_FFMPEG_DEB_PATH}"
+
+      - name: Build runtime image
+        run: |
+          set -euo pipefail
+          scripts/build-runtime-image.sh \
+            --deb "${OCTANS_FFMPEG_DEB_PATH}" \
+            --version "${OCTANS_FFMPEG_IMAGE_VERSION}" \
+            --tag "${OCTANS_FFMPEG_LOCAL_IMAGE}" \
+            --no-registry-tags
+
+      - name: Verify runtime image
+        run: |
+          set -euo pipefail
+          scripts/verify-runtime-image.sh "${OCTANS_FFMPEG_LOCAL_IMAGE}"
+          scripts/verify-runtime-image-gpu.sh "${OCTANS_FFMPEG_LOCAL_IMAGE}"
+
+      - name: Report local artifacts
+        run: |
+          set -euo pipefail
+
+          image_id="$(docker image inspect --format '{{.Id}}' "${OCTANS_FFMPEG_LOCAL_IMAGE}")"
+          image_size="$(docker image inspect --format '{{.Size}}' "${OCTANS_FFMPEG_LOCAL_IMAGE}")"
+
+          printf 'FFmpeg CI build completed:\n'
+          printf '  deb: %s\n' "${OCTANS_FFMPEG_DEB_PATH}"
+          printf '  deb_sha256: '
+          sha256sum "${OCTANS_FFMPEG_DEB_PATH}" | awk '{print $1}'
+          printf '  image: %s\n' "${OCTANS_FFMPEG_LOCAL_IMAGE}"
+          printf '  image_id: %s\n' "${image_id}"
+          printf '  image_size_bytes: %s\n' "${image_size}"
+
+      - name: Cleanup local images
+        if: always()
+        run: |
+          set -euo pipefail
+
+          if [[ -n "${OCTANS_FFMPEG_LOCAL_IMAGE:-}" ]]; then
+            docker image rm "${OCTANS_FFMPEG_LOCAL_IMAGE}" >/dev/null 2>&1 || true
+          fi
+
+          if [[ -n "${OCTANS_FFMPEG_BUILD_IMAGE:-}" ]]; then
+            docker image rm "${OCTANS_FFMPEG_BUILD_IMAGE}" >/dev/null 2>&1 || true
+          fi

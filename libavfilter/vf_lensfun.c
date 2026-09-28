@@ -284,8 +284,8 @@ static int config_props(AVFilterLink *inlink)
 static int vignetting_filter_slice(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 {
     const VignettingThreadData *thread_data = arg;
-    const int slice_start = thread_data->height *  jobnr      / nb_jobs;
-    const int slice_end   = thread_data->height * (jobnr + 1) / nb_jobs;
+    const int slice_start = ff_slice_pos(thread_data->height, jobnr, nb_jobs);
+    const int slice_end   = ff_slice_pos(thread_data->height, jobnr + 1, nb_jobs);
 
     lf_modifier_apply_color_modification(thread_data->modifier,
                                          thread_data->data_in + slice_start * thread_data->linesize_in,
@@ -307,8 +307,8 @@ static float square(float x)
 static int distortion_correction_filter_slice(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 {
     const DistortionCorrectionThreadData *thread_data = arg;
-    const int slice_start = thread_data->height *  jobnr      / nb_jobs;
-    const int slice_end   = thread_data->height * (jobnr + 1) / nb_jobs;
+    const int slice_start = ff_slice_pos(thread_data->height, jobnr, nb_jobs);
+    const int slice_end   = ff_slice_pos(thread_data->height, jobnr + 1, nb_jobs);
 
     int x, y, i, j, rgb_index;
     float interpolated, new_x, new_y, d, norm;
@@ -519,15 +519,15 @@ static const AVFilterPad lensfun_inputs[] = {
     },
 };
 
-const AVFilter ff_vf_lensfun = {
-    .name          = "lensfun",
-    .description   = NULL_IF_CONFIG_SMALL("Apply correction to an image based on info derived from the lensfun database."),
+const FFFilter ff_vf_lensfun = {
+    .p.name        = "lensfun",
+    .p.description = NULL_IF_CONFIG_SMALL("Apply correction to an image based on info derived from the lensfun database."),
+    .p.priv_class  = &lensfun_class,
+    .p.flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
     .priv_size     = sizeof(LensfunContext),
     .init          = init,
     .uninit        = uninit,
     FILTER_INPUTS(lensfun_inputs),
     FILTER_OUTPUTS(ff_video_default_filterpad),
     FILTER_SINGLE_PIXFMT(AV_PIX_FMT_RGB24),
-    .priv_class    = &lensfun_class,
-    .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
 };
