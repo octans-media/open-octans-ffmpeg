@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "RC 版本，例如 8.1.2-jellyfin4-octans13-rc.1"
+        description: "RC 版本，例如 8.1.3-jellyfin1-octans15-rc.1"
         required: true
       recovery:
         description: "仅在恢复同一版本的失败发布时填 true"
@@ -47,7 +47,7 @@ jobs:
 
           if [[ ! "${rc_version}" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)-jellyfin([1-9][0-9]*)-octans([1-9][0-9]*)-rc\.([1-9][0-9]*)$ ]]; then
             printf 'invalid RC version: %s\n' "${rc_version}" >&2
-            printf 'expected format: 8.1.2-jellyfin4-octans13-rc.1\n' >&2
+            printf 'expected format: 8.1.3-jellyfin1-octans15-rc.1\n' >&2
             exit 1
           fi
 

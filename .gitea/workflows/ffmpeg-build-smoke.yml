@@ -54,10 +54,10 @@ jobs:
           ci_id="${ci_timestamp}-${short_sha}"
 
           build_root="${OCTANS_FFMPEG_CI_CACHE_ROOT}/${ci_id}"
-          build_version="octans-ffmpeg-full-linux-8.1.2-ci-${ci_id}-ubuntu2604-system-runtime"
+          build_version="octans-ffmpeg-full-linux-8.1.3-ci-${ci_id}-ubuntu2604-system-runtime"
           build_image="octans-ffmpeg-full-linux-build:ci-${short_sha}"
-          deb_version="8.1.2+jellyfin4+octans.ci.${ci_timestamp}.${short_sha}"
-          image_version="8.1.2-jellyfin4-octans-ci-${ci_timestamp}-${short_sha}-resolute-amd64"
+          deb_version="8.1.3+jellyfin1+octans.ci.${ci_timestamp}.${short_sha}"
+          image_version="8.1.3-jellyfin1-octans-ci-${ci_timestamp}-${short_sha}-resolute-amd64"
           local_image="octans-ffmpeg-full:${image_version}"
           deb_path="${build_root}/dist/octans-ffmpeg-full_${deb_version}_amd64.deb"
 

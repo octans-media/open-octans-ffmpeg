@@ -4,8 +4,8 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 build_root="${OCTANS_FFMPEG_BUILD_ROOT:-${repo_root}/.build}"
-deb_path="${OCTANS_FFMPEG_DEB_PATH:-${build_root}/dist/octans-ffmpeg-full_8.1.2+jellyfin4+octans13_amd64.deb}"
-image_version="${OCTANS_FFMPEG_IMAGE_VERSION:-8.1.2-jellyfin4-octans13-resolute-amd64}"
+deb_path="${OCTANS_FFMPEG_DEB_PATH:-${build_root}/dist/octans-ffmpeg-full_8.1.3+jellyfin1+octans15_amd64.deb}"
+image_version="${OCTANS_FFMPEG_IMAGE_VERSION:-8.1.3-jellyfin1-octans15-resolute-amd64}"
 local_image="${OCTANS_FFMPEG_RUNTIME_IMAGE:-octans-ffmpeg-full:${image_version}}"
 harbor_image="${OCTANS_FFMPEG_HARBOR_IMAGE:-}"
 context_dir="${OCTANS_FFMPEG_RUNTIME_CONTEXT:-${build_root}/work/runtime-image/${image_version}}"

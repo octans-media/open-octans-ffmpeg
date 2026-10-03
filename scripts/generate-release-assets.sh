@@ -36,7 +36,7 @@ Options:
   --build-root PATH      CI build root. Defaults to OCTANS_FFMPEG_BUILD_ROOT.
   --build-version NAME   Build version. Defaults to OCTANS_FFMPEG_BUILD_VERSION.
   --deb PATH             Debian package path. Defaults to OCTANS_FFMPEG_DEB_PATH.
-  --version VER          Release version, e.g. 8.1.2-jellyfin4-octans13-rc.1.
+  --version VER          Release version, e.g. 8.1.3-jellyfin1-octans15-rc.1.
   --stable-version VER   Backward-compatible alias for --version.
   --channel NAME         Release channel: stable or rc. Defaults to stable.
   --deb-version VER      Debian version. Defaults to OCTANS_FFMPEG_DEB_VERSION.

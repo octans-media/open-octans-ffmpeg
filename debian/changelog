@@ -1,5 +1,6 @@
-octans-ffmpeg-full (8.1.2+jellyfin4+octans13) resolute; urgency=medium
+octans-ffmpeg-full (8.1.3+jellyfin1+octans15) resolute; urgency=medium
 
-  * GPLv3 full runtime sources for the Octans server build.
+  * Rebase on jellyfin-ffmpeg v8.1.3-1.
+  * Drop the readrate remux stall patch; FFmpeg 8.1.3 already limits readrate to the slowest stream.
 
- -- Octans Media <octans-media@users.noreply.github.com>  Mon, 28 Sep 2026 16:00:00 +0800
+ -- Octans Media <octans-media@users.noreply.github.com>  Sat, 03 Oct 2026 15:30:00 +0800

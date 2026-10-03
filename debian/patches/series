@@ -22,7 +22,6 @@
 0068-fix-dummy-hw-frame-missing-hw-frames-ctx.patch
 0074-fix-mapped-hwframe-to-swframe-swscale-conversion.patch
 0075-fix-hwupload-filter-cannot-use-devices-created-by-hwaccel.patch
-0077-fix-readrate-catchup-caused-remuxing-to-stall.patch
 0078-backport-fixes-for-vulkan-from-upstream.patch
 0079-add-fixes-for-vaapi-drm-prime-vulkan-interop.patch
 0080-prefer-vulkan-device-with-higher-api-version.patch

@@ -64,8 +64,8 @@ jobs:
             exit 1
           fi
 
-          ffmpeg_version="8.1.2"
-          jellyfin_revision="4"
+          ffmpeg_version="8.1.3"
+          jellyfin_revision="1"
           platform_tag="resolute-amd64"
           build_root="${OCTANS_FFMPEG_CI_CACHE_ROOT}/${ci_id}"
           build_version="octans-ffmpeg-full-linux-${ci_id}-ubuntu2604-system-runtime"

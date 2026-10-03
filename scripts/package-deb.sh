@@ -8,7 +8,7 @@ if [[ -z "${package_name}" ]]; then
   package_name="octans-ffmpeg-full"
 fi
 package_kind="${OCTANS_FFMPEG_DEB_KIND:-core}"
-version="${OCTANS_FFMPEG_DEB_VERSION:-8.1.2+jellyfin4+octans13}"
+version="${OCTANS_FFMPEG_DEB_VERSION:-8.1.3+jellyfin1+octans15}"
 arch="${OCTANS_FFMPEG_DEB_ARCH:-amd64}"
 build_root="${OCTANS_FFMPEG_BUILD_ROOT:-${repo_root}/.build}"
 stage_input="${OCTANS_FFMPEG_STAGE:-${build_root}/stage/current}"

@@ -77,10 +77,10 @@ echo "runtime: ${runtime_dir}"
 [[ -x "${helper_bin}" ]] || fail "capability helper missing: ${helper_bin}"
 
 version_output="$(run_ffmpeg -hide_banner -version)"
-require_text "${version_output}" "8.1.2-OctansFull" "ffmpeg version"
+require_text "${version_output}" "8.1.3-OctansFull" "ffmpeg version"
 
 ffprobe_output="$(run_ffprobe -hide_banner -version)"
-require_text "${ffprobe_output}" "8.1.2-OctansFull" "ffprobe version"
+require_text "${ffprobe_output}" "8.1.3-OctansFull" "ffprobe version"
 
 license_output="$(run_ffmpeg -hide_banner -L)"
 require_text "${license_output}" "GNU General Public License" "license"

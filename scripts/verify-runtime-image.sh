@@ -2,7 +2,7 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-default_image="${OCTANS_FFMPEG_RUNTIME_IMAGE:-octans-ffmpeg-full:8.1.2-jellyfin4-octans13-resolute-amd64}"
+default_image="${OCTANS_FFMPEG_RUNTIME_IMAGE:-octans-ffmpeg-full:8.1.3-jellyfin1-octans15-resolute-amd64}"
 image="${1:-${default_image}}"
 
 usage() {

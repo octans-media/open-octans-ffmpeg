@@ -3,7 +3,7 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-version="${OCTANS_FFMPEG_VERSION:-octans-ffmpeg-full-linux-8.1.2-1-ubuntu2604-system-runtime}"
+version="${OCTANS_FFMPEG_VERSION:-octans-ffmpeg-full-linux-8.1.3-1-ubuntu2604-system-runtime}"
 image="${OCTANS_FFMPEG_BUILD_IMAGE:-octans-ffmpeg-full-linux-build:resolute}"
 build_root="${OCTANS_FFMPEG_BUILD_ROOT:-${repo_root}/.build}"
 work_dir="${build_root}/work/${version}"

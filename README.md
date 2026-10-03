@@ -1,6 +1,6 @@
 # Octans FFmpeg
 
-Octans FFmpeg is a GPLv3 server-side FFmpeg full runtime. The current tree is FFmpeg 8.1.2 plus the Jellyfin patch series used for playback, transcoding, subtitles, and hardware acceleration.
+Octans FFmpeg is a GPLv3 server-side FFmpeg full runtime. The current tree is FFmpeg 8.1.3 plus the Jellyfin patch series used for playback, transcoding, subtitles, and hardware acceleration.
 
 This build is configured with `--enable-gpl`, `--enable-version3`, `--enable-libx264`, and `--enable-libx265`. The resulting binaries are GPLv3. Corresponding source is this repository.
 
