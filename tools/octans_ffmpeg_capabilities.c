@@ -7,6 +7,7 @@
  * the Octans backend.
  */
 
+#include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
@@ -82,7 +83,9 @@ static const char *filter_help_names[] = {
     "loudnorm",
     "dynaudnorm",
     "acompressor",
-    "alimiter"
+    "alimiter",
+    "scale_cuda",
+    "tonemap_cuda"
 };
 
 static const VaapiProfileProbe vaapi_decode_profiles[] = {
@@ -696,6 +699,110 @@ static ProbeResult run_opencl_vaapi_interop_smoke(const char *ffmpeg, const char
     return run_simple_probe(ffmpeg, args, sizeof(args) / sizeof(args[0]), NULL);
 }
 
+static bool output_lists_name(const char *text, const char *name)
+{
+    if (!text || !name || name[0] == '\0') {
+        return false;
+    }
+
+    size_t name_len = strlen(name);
+    for (const char *cursor = text; (cursor = strstr(cursor, name)) != NULL; cursor += name_len) {
+        bool left_boundary = cursor == text || isspace((unsigned char)cursor[-1]);
+        char right = cursor[name_len];
+        bool right_boundary = right == '\0' || isspace((unsigned char)right);
+        if (left_boundary && right_boundary) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static ProbeResult run_cuda_device_probe(const char *ffmpeg)
+{
+    const char *args[] = {
+        "-hide_banner",
+        "-init_hw_device", "cuda=cu:0",
+        "-f", "lavfi",
+        "-i", "nullsrc=s=16x16:d=0.04",
+        "-f", "null",
+        "-"
+    };
+
+    return run_simple_probe(ffmpeg, args, sizeof(args) / sizeof(args[0]), NULL);
+}
+
+static void json_cuda_codec(FILE *out, const char *codec, const char *name, bool listed, bool trailing_comma)
+{
+    fputs("{\"codec\":", out);
+    json_string(out, codec);
+    fputs(",\"name\":", out);
+    json_string(out, name);
+    fputs(",\"listed\":", out);
+    fputs(listed ? "true" : "false", out);
+    fputc('}', out);
+    if (trailing_comma) {
+        fputc(',', out);
+    }
+}
+
+static void json_cuda_device(
+    FILE *out,
+    const ProbeResult *device_probe,
+    const ProbeResult *encoders,
+    const ProbeResult *decoders,
+    const ProbeResult *filters)
+{
+    const char *encoder_text = encoders && encoders->stdout_text ? encoders->stdout_text : "";
+    const char *decoder_text = decoders && decoders->stdout_text ? decoders->stdout_text : "";
+    const char *filter_text = filters && filters->stdout_text ? filters->stdout_text : "";
+    bool device_ok = device_probe && device_probe->ok;
+    bool scale_cuda = output_lists_name(filter_text, "scale_cuda");
+    bool tonemap_cuda = output_lists_name(filter_text, "tonemap_cuda");
+    static const char *decode_codecs[] = { "h264", "hevc", "av1", "vp9" };
+    static const char *decode_names[] = { "h264_cuvid", "hevc_cuvid", "av1_cuvid", "vp9_cuvid" };
+    static const char *encode_codecs[] = { "h264", "hevc", "av1", "vp9" };
+    static const char *encode_names[] = { "h264_nvenc", "hevc_nvenc", "av1_nvenc", "vp9_nvenc" };
+
+    fputs("\"cuda\":{", out);
+    fputs("\"available\":", out);
+    fputs(device_ok ? "true" : "false", out);
+    fputs(",\"device\":\"cuda=cu:0\",\"reason\":", out);
+    if (device_ok) {
+        fputs("null", out);
+    } else {
+        json_string(out, "cuda device 0 init failed");
+    }
+
+    fputs(",\"decode\":[", out);
+    for (size_t i = 0; i < 4; i++) {
+        json_cuda_codec(
+            out,
+            decode_codecs[i],
+            decode_names[i],
+            output_lists_name(decoder_text, decode_names[i]),
+            i + 1 < 4);
+    }
+
+    fputs("],\"encode\":[", out);
+    for (size_t i = 0; i < 4; i++) {
+        json_cuda_codec(
+            out,
+            encode_codecs[i],
+            encode_names[i],
+            output_lists_name(encoder_text, encode_names[i]),
+            i + 1 < 4);
+    }
+
+    fputs("],\"scaleCuda\":", out);
+    fputs(scale_cuda ? "true" : "false", out);
+    fputs(",\"tonemapCuda\":", out);
+    fputs(tonemap_cuda ? "true" : "false", out);
+    fputs(",\"toneMapAvailable\":", out);
+    fputs(device_ok && scale_cuda && tonemap_cuda ? "true" : "false", out);
+    fputc('}', out);
+}
+
 static void usage(FILE *out)
 {
     fputs(
@@ -846,6 +953,7 @@ int main(int argc, char **argv)
     ProbeResult webvtt_reference_stream_smoke = { 0 };
     ProbeResult runtime_control_help = { 0 };
     ProbeResult opencl_vaapi_interop_smoke = { 0 };
+    ProbeResult cuda_device_probe = { 0 };
     ProbeResult filter_help[sizeof(filter_help_names) / sizeof(filter_help_names[0])] = { 0 };
 
     if (core_available) {
@@ -890,6 +998,8 @@ int main(int argc, char **argv)
         if (options.run_opencl_vaapi_interop_smoke) {
             opencl_vaapi_interop_smoke = run_opencl_vaapi_interop_smoke(options.ffmpeg, options.vaapi_device);
         }
+
+        cuda_device_probe = run_cuda_device_probe(options.ffmpeg);
     }
 
     fputs("{", stdout);
@@ -932,7 +1042,8 @@ int main(int argc, char **argv)
             json_probe_result(stdout, filter_help_names[i], &filter_help[i], i + 1 < sizeof(filter_help_names) / sizeof(filter_help_names[0]));
         }
         fputs("},", stdout);
-        json_probe_result(stdout, "openClVaapiInteropToneMapSmoke", &opencl_vaapi_interop_smoke, false);
+        json_probe_result(stdout, "openClVaapiInteropToneMapSmoke", &opencl_vaapi_interop_smoke, true);
+        json_probe_result(stdout, "cudaDevice", &cuda_device_probe, false);
     }
 
     fputs("},\"hardwareDevices\":{", stdout);
@@ -942,6 +1053,13 @@ int main(int argc, char **argv)
         stdout,
         options.run_opencl_vaapi_interop_smoke ? &opencl_vaapi_interop_smoke : NULL,
         options.run_opencl_vaapi_interop_smoke);
+    fputc(',', stdout);
+    json_cuda_device(
+        stdout,
+        core_available ? &cuda_device_probe : NULL,
+        core_available ? &encoders : NULL,
+        core_available ? &decoders : NULL,
+        core_available ? &filters : NULL);
     fputs("}}}", stdout);
     fputc('\n', stdout);
 
@@ -960,6 +1078,7 @@ int main(int argc, char **argv)
     free_probe_result(&webvtt_reference_stream_smoke);
     free_probe_result(&runtime_control_help);
     free_probe_result(&opencl_vaapi_interop_smoke);
+    free_probe_result(&cuda_device_probe);
     for (size_t i = 0; i < sizeof(filter_help_names) / sizeof(filter_help_names[0]); i++) {
         free_probe_result(&filter_help[i]);
     }

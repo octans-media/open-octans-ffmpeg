@@ -250,9 +250,17 @@ docker run --rm \
       2>&1 | tee /logs/'"${version}"'-configure.log
     make -j"${JOBS}" V=1 2>&1 | tee /logs/'"${version}"'-build.log
     make DESTDIR=/stage install 2>&1 | tee /logs/'"${version}"'-install.log
+    gcc -std=c11 -O2 -Wall -Wextra \
+      -I/stage/opt/octans-ffmpeg/include \
+      /src/tools/octans_ffmpeg_capabilities.c \
+      -L/stage/opt/octans-ffmpeg/lib \
+      -Wl,-rpath,"\$ORIGIN/../lib:\$ORIGIN" \
+      -o /stage/opt/octans-ffmpeg/bin/octans-ffmpeg-capabilities \
+      -lavutil -lva \
+      2>&1 | tee /logs/'"${version}"'-capabilities-helper.log
     runtime_rpath="\$ORIGIN/../lib:\$ORIGIN"
     find /stage/opt/octans-ffmpeg/bin /stage/opt/octans-ffmpeg/lib \
-      -type f \( -name ffmpeg -o -name ffprobe -o -name "*.so*" \) \
+      -type f \( -name ffmpeg -o -name ffprobe -o -name octans-ffmpeg-capabilities -o -name "*.so*" \) \
       -exec patchelf --set-rpath "${runtime_rpath}" {} \;
   '
 
