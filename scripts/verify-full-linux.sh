@@ -93,7 +93,13 @@ for flag in \
   "--enable-libsvtav1" \
   "--enable-libplacebo" \
   "--enable-vaapi" \
-  "--enable-opencl"; do
+  "--enable-opencl" \
+  "--enable-ffnvcodec" \
+  "--enable-cuda" \
+  "--enable-cuda-llvm" \
+  "--enable-cuvid" \
+  "--enable-nvdec" \
+  "--enable-nvenc"; do
   require_text "${buildconf_output}" "${flag}" "buildconf"
 done
 
@@ -102,12 +108,7 @@ for flag in \
   "--enable-libfdk-aac" \
   "--enable-openssl" \
   "--enable-libvpl" \
-  "--enable-nvenc" \
-  "--enable-amf" \
-  "--enable-cuda" \
-  "--enable-cuvid" \
-  "--enable-nvdec" \
-  "--enable-ffnvcodec"; do
+  "--enable-amf"; do
   reject_text "${buildconf_output}" "${flag}" "buildconf"
 done
 
@@ -140,9 +141,13 @@ for encoder in \
   "libvpx-vp9" \
   "libmp3lame" \
   "webvtt" \
-  "aac"; do
+  "aac" \
+  "h264_nvenc" \
+  "hevc_nvenc" \
+  "av1_nvenc"; do
   require_entry "${encoder_output}" "${encoder}" "encoder"
 done
+reject_text "${encoder_output}" "vp9_nvenc" "encoder"
 
 muxer_output="$(run_ffmpeg -hide_banner -muxers)"
 for muxer in \
@@ -153,12 +158,23 @@ for muxer in \
   require_entry "${muxer_output}" "${muxer}" "muxer"
 done
 
+decoder_output="$(run_ffmpeg -hide_banner -decoders)"
+for decoder in \
+  "h264_cuvid" \
+  "hevc_cuvid" \
+  "av1_cuvid" \
+  "vp9_cuvid"; do
+  require_entry "${decoder_output}" "${decoder}" "decoder"
+done
+
 filter_output="$(run_ffmpeg -hide_banner -filters)"
 for filter in \
   "tonemapx" \
   "tonemap_opencl" \
   "tonemap_vaapi" \
   "scale_vaapi" \
+  "scale_cuda" \
+  "tonemap_cuda" \
   "libplacebo" \
   "zscale" \
   "pan" \

@@ -62,4 +62,13 @@ RUN apt-get update \
     libshaderc-dev \
     libdrm-dev \
     libva-dev \
+    cuda-nvcc-13-1 \
+    cuda-cudart-dev-13-1 \
+ && nvcc_path="$(find /usr -name nvcc -type f | head -1)" \
+ && test -n "$nvcc_path" \
+ && ln -sfn "$nvcc_path" /usr/local/bin/nvcc \
+ && git clone https://github.com/FFmpeg/nv-codec-headers.git /tmp/nv-codec-headers \
+ && git -C /tmp/nv-codec-headers checkout 451da99614412a7f9526ef301a5ee0c7a6f9ad76 \
+ && make -C /tmp/nv-codec-headers PREFIX=/usr LIBDIR=lib install \
+ && rm -rf /tmp/nv-codec-headers \
  && rm -rf /var/lib/apt/lists/*

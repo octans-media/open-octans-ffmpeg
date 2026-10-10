@@ -31,6 +31,9 @@ rsync -a --delete \
 
 dpkg-source --before-build "${work_dir}" | tee "${log_dir}/${version}-patches.log"
 
+"${repo_root}/scripts/apply-nvidia-cuda-patches.sh" "${work_dir}" \
+  2>&1 | tee -a "${log_dir}/${version}-patches.log"
+
 run_jobs="${jobs}"
 if [[ -z "${run_jobs}" ]]; then
   run_jobs="$(nproc)"
@@ -91,12 +94,12 @@ docker run --rm \
       --enable-libdrm \
       --enable-vaapi \
       --disable-libvpl \
-      --disable-ffnvcodec \
-      --disable-cuda \
-      --disable-cuda-llvm \
-      --disable-cuvid \
-      --disable-nvdec \
-      --disable-nvenc \
+      --enable-ffnvcodec \
+      --enable-cuda \
+      --enable-cuda-llvm \
+      --enable-cuvid \
+      --enable-nvdec \
+      --enable-nvenc \
       --disable-amf \
       2>&1 | tee /logs/'"${version}"'-configure.log
     make -j"${JOBS}" V=1 2>&1 | tee /logs/'"${version}"'-build.log

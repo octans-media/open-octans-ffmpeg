@@ -9,6 +9,7 @@ on:
       - ".gitea/workflows/ffmpeg-build-smoke.yml"
       - "debian/**"
       - "docker/**"
+      - "scripts/apply-nvidia-cuda-patches.sh"
       - "scripts/build-octans-full-linux.sh"
       - "scripts/build-runtime-image.sh"
       - "scripts/package-deb.sh"

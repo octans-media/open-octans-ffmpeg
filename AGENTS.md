@@ -4,7 +4,8 @@ This repository builds the Octans server FFmpeg full runtime. The build is GPLv3
 
 ## Layout
 
-- `scripts/build-octans-full-linux.sh` configures and builds the Linux runtime.
+- `scripts/build-octans-full-linux.sh` configures and builds the Linux runtime. It keeps VAAPI and OpenCL and enables CUDA, NVDEC, and NVENC.
+- `scripts/apply-nvidia-cuda-patches.sh` applies the CUDA tonemap patches after `debian/patches/series`.
 - `scripts/verify-full-linux.sh` checks the staged binaries.
 - `scripts/package-deb.sh` packs the Debian package.
 - `scripts/build-runtime-image.sh` builds the runtime image.

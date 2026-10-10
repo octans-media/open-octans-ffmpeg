@@ -19,7 +19,7 @@ scripts/build-runtime-image.sh --no-registry-tags
 scripts/verify-runtime-image.sh
 ```
 
-`scripts/build-octans-full-linux.sh` applies `debian/patches/series` with `dpkg-source --before-build`, then configures and installs into `.build/` unless `OCTANS_FFMPEG_BUILD_ROOT` is set.
+`scripts/build-octans-full-linux.sh` applies `debian/patches/series` with `dpkg-source --before-build`, then `scripts/apply-nvidia-cuda-patches.sh`, then configures and installs into `.build/` unless `OCTANS_FFMPEG_BUILD_ROOT` is set. The same configure keeps VAAPI and OpenCL and enables CUDA, NVDEC, and NVENC.
 
 The runtime image install paths are:
 
@@ -52,4 +52,4 @@ Gitea Actions reads the same addresses from repository variables, and reads regi
 
 ## License
 
-FFmpeg's own license terms are in `LICENSE.md` and the `COPYING.*` files. Enabling GPL components and linking libx264/libx265 makes this build GPLv3. The source required to rebuild the distributed binaries is this repository, including `debian/patches` and `scripts/build-octans-full-linux.sh`.
+FFmpeg's own license terms are in `LICENSE.md` and the `COPYING.*` files. Enabling GPL components and linking libx264/libx265 makes this build GPLv3. The source required to rebuild the distributed binaries is this repository, including `debian/patches`, `scripts/apply-nvidia-cuda-patches.sh`, and `scripts/build-octans-full-linux.sh`.
